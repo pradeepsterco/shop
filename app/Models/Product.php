@@ -53,6 +53,8 @@ class Product extends Model
         'reviewed_by_admin_id',
         'reviewed_at',
         'pending_changes',
+        'needs_update',
+        'needs_update_reason',
     ];
 
     protected function casts(): array
@@ -63,6 +65,8 @@ class Product extends Model
             'pending_changes' => 'array',
             'qc_status' => ProductQcStatus::class,
             'reviewed_at' => 'datetime',
+            'needs_update' => 'boolean',
+            'needs_update_reason' => 'array',
         ];
     }
 
@@ -130,6 +134,232 @@ class Product extends Model
     public function listings(): HasManyThrough
     {
         return $this->hasManyThrough(Listing::class, ProductVariant::class);
+    }
+
+    /**
+     * Inspect product and its variants/listings for integrity issues.
+     * Pure function: returns structured issues array without modifying database.
+     *
+     * @return array<int, array{variant_id: int|null, code: string, message: string}>
+     */
+    public function variantIssues(): array
+    {
+        $issues = [];
+        $variants = $this->relationLoaded('variants')
+            ? $this->variants
+            : $this->variants()->with(['listings'])->get();
+
+        if ($variants->isEmpty()) {
+            $issues[] = [
+                'variant_id' => null,
+                'code' => 'no_variants',
+                'message' => 'Product has no variants configured.',
+            ];
+
+            return $issues;
+        }
+
+        $vertical = $this->relationLoaded('vertical')
+            ? $this->vertical
+            : $this->vertical()->with('attributes')->first();
+
+        $attributesMap = [];
+        if ($vertical) {
+            $attrs = $vertical->relationLoaded('attributes')
+                ? $vertical->getRelation('attributes')
+                : $vertical->attributes()->get();
+
+            foreach ($attrs as $attr) {
+                $attributesMap[$attr->code] = $attr;
+            }
+        }
+
+        $activeValidCount = 0;
+        $seenKeys = [];
+
+        foreach ($variants as $variant) {
+            $vKey = $variant->variant_key;
+
+            // Check duplicate keys
+            if (isset($seenKeys[$vKey])) {
+                $issues[] = [
+                    'variant_id' => $variant->id,
+                    'code' => 'duplicate_signature',
+                    'message' => "Duplicate variant signature '{$vKey}' detected.",
+                ];
+            }
+            $seenKeys[$vKey] = true;
+
+            // Check listings for this variant
+            $listings = $variant->relationLoaded('listings')
+                ? $variant->listings
+                : $variant->listings()->get();
+
+            if ($listings->isEmpty()) {
+                $issues[] = [
+                    'variant_id' => $variant->id,
+                    'code' => 'missing_listing',
+                    'message' => "Variant {$vKey} has no pricing or stock offers.",
+                ];
+
+                continue;
+            }
+
+            $variantHasValidActiveListing = false;
+
+            foreach ($listings as $listing) {
+                if ($listing->trashed()) {
+                    continue;
+                }
+
+                $listingInvalid = false;
+
+                if (blank($listing->sku)) {
+                    $issues[] = [
+                        'variant_id' => $variant->id,
+                        'code' => 'missing_sku',
+                        'message' => "Variant {$vKey} has a listing with a blank SKU.",
+                    ];
+                    $listingInvalid = true;
+                }
+
+                if ($listing->mrp <= 0) {
+                    $issues[] = [
+                        'variant_id' => $variant->id,
+                        'code' => 'invalid_mrp',
+                        'message' => "Variant {$vKey} MRP must be greater than 0.",
+                    ];
+                    $listingInvalid = true;
+                }
+
+                if ($listing->selling_price <= 0) {
+                    $issues[] = [
+                        'variant_id' => $variant->id,
+                        'code' => 'missing_price',
+                        'message' => "Variant {$vKey} selling price must be greater than 0.",
+                    ];
+                    $listingInvalid = true;
+                } elseif ($listing->selling_price > $listing->mrp) {
+                    $issues[] = [
+                        'variant_id' => $variant->id,
+                        'code' => 'price_exceeds_mrp',
+                        'message' => "Variant {$vKey} selling price cannot exceed MRP.",
+                    ];
+                    $listingInvalid = true;
+                }
+
+                if ($listing->stock < 0) {
+                    $issues[] = [
+                        'variant_id' => $variant->id,
+                        'code' => 'invalid_stock',
+                        'message' => "Variant {$vKey} stock cannot be negative.",
+                    ];
+                    $listingInvalid = true;
+                }
+
+                if (! $listingInvalid && $listing->status->value === 'active') {
+                    $variantHasValidActiveListing = true;
+                }
+            }
+
+            if ($variantHasValidActiveListing) {
+                $activeValidCount++;
+            }
+        }
+
+        // If product has no active valid variants at all
+        if ($activeValidCount === 0 && $this->qc_status === ProductQcStatus::Approved) {
+            $issues[] = [
+                'variant_id' => null,
+                'code' => 'no_active_variants',
+                'message' => 'Product has no valid active variants listed.',
+            ];
+        }
+
+        return $issues;
+    }
+
+    /**
+     * Deactivates only listings that are truly unsellable (missing/zero price or price > MRP or missing SKU).
+     */
+    public function deactivateUnsellableListings(): int
+    {
+        $deactivated = 0;
+
+        foreach ($this->variants()->with('listings')->get() as $variant) {
+            foreach ($variant->listings as $listing) {
+                if ($listing->trashed() || $listing->status->value !== 'active') {
+                    continue;
+                }
+
+                if ($listing->selling_price <= 0 || $listing->mrp <= 0 || $listing->selling_price > $listing->mrp || blank($listing->sku)) {
+                    $listing->deactivate();
+                    $deactivated++;
+                }
+            }
+        }
+
+        return $deactivated;
+    }
+
+    /**
+     * Checks issues and updates needs_update flag and reason.
+     */
+    public function flagNeedsUpdate(): bool
+    {
+        $issues = $this->variantIssues();
+
+        if (! empty($issues)) {
+            $this->update([
+                'needs_update' => true,
+                'needs_update_reason' => $issues,
+            ]);
+            $this->deactivateUnsellableListings();
+
+            return true;
+        }
+
+        if ($this->needs_update) {
+            $this->update([
+                'needs_update' => false,
+                'needs_update_reason' => null,
+            ]);
+        }
+
+        return false;
+    }
+
+    /**
+     * Return active options plus options already present on this product's variants for the given attribute.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function availableOptionsForAttribute(VerticalAttribute $attr): array
+    {
+        $options = is_array($attr->options) ? $attr->options : [];
+
+        $existingValues = [];
+        $variants = $this->relationLoaded('variants') ? $this->variants : $this->variants()->get();
+        foreach ($variants as $variant) {
+            if (! $variant->trashed() && isset($variant->variant_attributes[$attr->code])) {
+                $existingValues[] = (string) $variant->variant_attributes[$attr->code];
+            }
+        }
+
+        $available = [];
+        foreach ($options as $opt) {
+            $val = (string) ($opt['value'] ?? '');
+            $isActive = ! empty($opt['is_active']) && empty($opt['is_retired']);
+            $isExisting = in_array($val, $existingValues, true);
+
+            if ($isActive || $isExisting) {
+                $opt['is_existing_on_product'] = $isExisting;
+                $opt['is_retired'] = ! empty($opt['is_retired']);
+                $available[] = $opt;
+            }
+        }
+
+        return $available;
     }
 
     public function canonicalSlug(): string

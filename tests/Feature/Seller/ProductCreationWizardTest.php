@@ -140,7 +140,12 @@ test('seller can create new product through 5-step wizard and submit to QC', fun
     $component->set('batch_mrp', '899.00')
         ->set('batch_price', '599.00')
         ->set('batch_stock', '15')
-        ->call('applyToAll')
+        ->call('applyToAll');
+
+    $rows = $component->get('variantRows');
+    $rows[0]['sku'] = 'NIKE-TEE-M';
+    $rows[1]['sku'] = 'NIKE-TEE-L';
+    $component->set('variantRows', $rows)
         ->call('saveStep4')
         ->assertSet('currentStep', 5);
 
@@ -293,4 +298,76 @@ test('variant matrix rejects duplicate SKUs across variants', function () {
         ])
         ->call('saveStep4')
         ->assertHasErrors(['variantRows.1.sku']);
+});
+
+test('resaving step 4 does not trigger false positive sku collision on existing listings for this draft product', function () {
+    $user = User::factory()->create();
+    $seller = SellerProfile::factory()->create([
+        'user_id' => $user->id,
+        'status' => SellerStatus::Approved,
+    ]);
+
+    $brand = Brand::create(['name' => 'Nike', 'slug' => 'nike', 'status' => BrandStatus::Approved]);
+    $cat = Category::create(['name' => 'Sports']);
+    $vert = Vertical::create(['category_id' => $cat->id, 'name' => 'Jersey', 'hsn_code' => '6109', 'gst_rate' => 5.0]);
+
+    VerticalAttribute::create([
+        'vertical_id' => $vert->id,
+        'name' => 'Size',
+        'code' => 'size',
+        'type' => AttributeType::Select,
+        'is_variant' => true,
+        'options' => [
+            ['label' => 'L', 'value' => 'l', 'is_active' => true],
+            ['label' => 'XL', 'value' => 'xl', 'is_active' => true],
+        ],
+    ]);
+
+    $component = Livewire::actingAs($user)
+        ->test('pages::seller.products-create')
+        ->call('startNewProduct')
+        ->set('vertical_id', $vert->id)
+        ->set('brand_id', $brand->id)
+        ->set('title', 'Dry Fit Jersey')
+        ->set('description', 'High performance sports jersey')
+        ->set('currentStep', 4)
+        ->set('variantRows', [
+            [
+                'key' => 'size:l',
+                'variant_attributes' => ['size' => 'l'],
+                'sku' => 'dfsd',
+                'mrp' => '2999.00',
+                'selling_price' => '2499.00',
+                'stock' => '10',
+                'barcode' => '',
+                'weight' => '',
+            ],
+            [
+                'key' => 'size:xl',
+                'variant_attributes' => ['size' => 'xl'],
+                'sku' => 'sdfsdf',
+                'mrp' => '2999.00',
+                'selling_price' => '2499.00',
+                'stock' => '10',
+                'barcode' => '',
+                'weight' => '',
+            ],
+        ]);
+
+    // First time clicking Continue to Review -> (saveStep4)
+    $component->call('saveStep4')
+        ->assertHasNoErrors()
+        ->assertSet('currentStep', 5);
+
+    // Verify variants and listings exist in DB
+    $draftId = $component->get('draftProductId');
+    $product = Product::with('variants.listings')->findOrFail($draftId);
+    expect($product->variants)->toHaveCount(2)
+        ->and(Listing::where('seller_profile_id', $seller->id)->count())->toBe(2);
+
+    // Seller goes back to Step 4 and clicks Continue to Review -> again
+    $component->set('currentStep', 4)
+        ->call('saveStep4')
+        ->assertHasNoErrors()
+        ->assertSet('currentStep', 5);
 });

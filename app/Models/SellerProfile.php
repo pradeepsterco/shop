@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 /**
  * @property int $id
@@ -132,6 +133,27 @@ class SellerProfile extends Model
     public function documents(): HasMany
     {
         return $this->hasMany(SellerDocument::class);
+    }
+
+    /**
+     * Generate a unique store slug from the given name.
+     */
+    public static function generateUniqueSlug(string $name, ?int $ignoreId = null): string
+    {
+        $base = Str::slug($name);
+        if (blank($base)) {
+            $base = 'store';
+        }
+
+        $slug = $base;
+        $counter = 1;
+
+        while (static::where('store_slug', $slug)->when($ignoreId, fn ($q) => $q->where('id', '!=', $ignoreId))->exists()) {
+            $slug = "{$base}-{$counter}";
+            $counter++;
+        }
+
+        return $slug;
     }
 
     /**

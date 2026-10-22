@@ -17,6 +17,27 @@ new #[Layout('layouts.seller')] #[Title('Seller Overview')] class extends Compon
 
         return $user->sellerProfile;
     }
+
+    #[Computed]
+    public function productStats(): array
+    {
+        $profile = $this->sellerProfile;
+        if (! $profile) {
+            return ['total' => 0, 'pending' => 0, 'approved' => 0, 'stock' => 0];
+        }
+
+        $base = \App\Models\Product::where(function ($q) use ($profile) {
+            $q->where('created_by', $profile->id)
+                ->orWhereHas('listings', fn ($l) => $l->where('seller_profile_id', $profile->id));
+        });
+
+        return [
+            'total' => (clone $base)->count(),
+            'pending' => (clone $base)->where('qc_status', \App\Enums\ProductQcStatus::QcPending)->count(),
+            'approved' => (clone $base)->where('qc_status', \App\Enums\ProductQcStatus::Approved)->count(),
+            'stock' => \App\Models\Listing::where('seller_profile_id', $profile->id)->sum('stock'),
+        ];
+    }
 }; ?>
 
 <div class="space-y-6">
@@ -33,6 +54,48 @@ new #[Layout('layouts.seller')] #[Title('Seller Overview')] class extends Compon
                 <span class="size-1.5 rounded-full bg-emerald-500"></span>
                 Store Active and Approved
             </span>
+        </div>
+    </div>
+
+    <!-- Product Catalog Quick Stats Card -->
+    <div class="overflow-hidden rounded-xl border border-zinc-200 bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-zinc-100 dark:border-zinc-800">
+            <div>
+                <h3 class="text-base font-semibold text-zinc-900 dark:text-white">Product Catalog & Inventory</h3>
+                <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Overview of your catalog submissions and current stock.</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <a href="{{ route('seller.products.index') }}" wire:navigate
+                   class="rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 transition">
+                    View All Products
+                </a>
+                <a href="{{ route('seller.products.create') }}" wire:navigate
+                   class="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 transition shadow-2xs">
+                    + Add Product
+                </a>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 text-xs">
+            <div class="rounded-lg border border-zinc-100 bg-zinc-50/50 p-3 dark:border-zinc-800/80 dark:bg-zinc-800/30">
+                <span class="text-zinc-500 dark:text-zinc-400 block">Total Catalog Items</span>
+                <span class="text-xl font-bold text-zinc-900 dark:text-white mt-1 block">{{ $this->productStats['total'] }}</span>
+            </div>
+
+            <div class="rounded-lg border border-zinc-100 bg-zinc-50/50 p-3 dark:border-zinc-800/80 dark:bg-zinc-800/30">
+                <span class="text-zinc-500 dark:text-zinc-400 block">Under QC Review</span>
+                <span class="text-xl font-bold text-amber-600 dark:text-amber-400 mt-1 block">{{ $this->productStats['pending'] }}</span>
+            </div>
+
+            <div class="rounded-lg border border-zinc-100 bg-zinc-50/50 p-3 dark:border-zinc-800/80 dark:bg-zinc-800/30">
+                <span class="text-zinc-500 dark:text-zinc-400 block">Live & Approved</span>
+                <span class="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-1 block">{{ $this->productStats['approved'] }}</span>
+            </div>
+
+            <div class="rounded-lg border border-zinc-100 bg-zinc-50/50 p-3 dark:border-zinc-800/80 dark:bg-zinc-800/30">
+                <span class="text-zinc-500 dark:text-zinc-400 block">Total Units In Stock</span>
+                <span class="text-xl font-bold text-zinc-900 dark:text-white mt-1 block">{{ number_format($this->productStats['stock']) }}</span>
+            </div>
         </div>
     </div>
 

@@ -5,7 +5,6 @@ namespace App\Models;
 use App\Enums\ProductImageStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Support\Facades\Storage;
 
 /**
  * @property int $id
@@ -60,6 +59,6 @@ class ProductImage extends Model
             return null;
         }
 
-        return Storage::disk('public')->url($this->path);
+        return asset('storage/'.ltrim($this->path, '/'));
     }
 }

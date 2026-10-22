@@ -9,6 +9,8 @@ use App\Models\Listing;
 use App\Models\Product;
 use App\Models\ProductImage;
 use App\Models\SellerProfile;
+use App\Services\VariantOfferValidator;
+use App\Services\VariantSyncService;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -87,31 +89,44 @@ new #[Layout('layouts.seller')] #[Title('Edit Product')] class extends Component
         /** @var SellerProfile $seller */
         $seller = Auth::user()->sellerProfile;
 
-        foreach ($this->sellerListings as $variantId => $data) {
-            if (! empty($data['sku']) && ! empty($data['mrp']) && ! empty($data['selling_price'])) {
-                if ((float) $data['selling_price'] > (float) $data['mrp']) {
-                    $this->addError("sellerListings.{$variantId}.selling_price", 'Selling price cannot exceed MRP.');
+        $validator = new VariantOfferValidator();
+        $validationResult = $validator->validateRows($this->sellerListings, $seller->id, $this->product, requireAtLeastOneActive: true);
 
-                    return;
+        if (! empty($validationResult['errors'])) {
+            foreach ($validationResult['errors'] as $key => $msg) {
+                if ($key === 'general') {
+                    $this->addError('general', $msg);
+                } else {
+                    $this->addError("sellerListings.{$key}", $msg);
                 }
-
-                $mrpPaise = (int) round(((float) $data['mrp']) * 100);
-                $sellingPricePaise = (int) round(((float) $data['selling_price']) * 100);
-
-                Listing::createOrRestore([
-                    'seller_profile_id' => $seller->id,
-                    'product_variant_id' => (int) $variantId,
-                    'sku' => $data['sku'],
-                    'mrp' => $mrpPaise,
-                    'selling_price' => $sellingPricePaise,
-                    'stock' => (int) $data['stock'],
-                    'status' => ListingStatus::from($data['status']),
-                ]);
             }
+
+            return;
         }
 
+        $syncService = new VariantSyncService();
+        $syncService->sync($this->product, $seller, $validationResult['validRows']);
+
+        $this->product->refresh();
         $this->loadSellerListings($seller->id);
         session()->flash('status', 'Your pricing, stock, and offer details updated successfully.');
+    }
+
+    public function removeVariant(int $variantId): void
+    {
+        /** @var SellerProfile $seller */
+        $seller = Auth::user()->sellerProfile;
+
+        try {
+            $syncService = new VariantSyncService();
+            $result = $syncService->removeVariant($this->product, $seller, $variantId, Auth::user());
+
+            $this->product->refresh();
+            $this->loadSellerListings($seller->id);
+            session()->flash('status', $result['message']);
+        } catch (\DomainException $e) {
+            $this->addError('general', $e->getMessage());
+        }
     }
 
     public function saveCatalogContent(): void
@@ -173,6 +188,7 @@ new #[Layout('layouts.seller')] #[Title('Edit Product')] class extends Component
             session()->flash('status', 'Product updated and resubmitted for Admin QC review.');
         }
 
+        $this->product->flagNeedsUpdate();
         $this->product->refresh();
     }
 
@@ -221,6 +237,26 @@ new #[Layout('layouts.seller')] #[Title('Edit Product')] class extends Component
         </div>
     @endif
 
+    <!-- Needs Update Banner -->
+    @if ($product->needs_update)
+        <div class="rounded-xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200 space-y-2">
+            <div class="flex items-center gap-2 font-bold text-sm text-amber-800 dark:text-amber-300">
+                <svg class="size-5 shrink-0 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                </svg>
+                Action Required: This product needs updates before it can be listed or approved
+            </div>
+            <p class="text-xs text-amber-700 dark:text-amber-300">
+                The following variant integrity issues were detected and must be corrected:
+            </p>
+            <ul class="list-disc list-inside space-y-1 font-medium">
+                @foreach ($product->needs_update_reason ?? [] as $issue)
+                    <li>{{ $issue['message'] ?? 'Variant issue detected' }}</li>
+                @endforeach
+            </ul>
+        </div>
+    @endif
+
     <!-- Rejection Notes Alert -->
     @if ($product->qc_status === ProductQcStatus::Rejected && $product->qc_notes)
         <div class="rounded-xl border border-red-200 bg-red-50 p-4 text-xs text-red-800 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
@@ -253,30 +289,44 @@ new #[Layout('layouts.seller')] #[Title('Edit Product')] class extends Component
                             <th class="px-3 py-2">Selling Price (₹) *</th>
                             <th class="px-3 py-2">Stock *</th>
                             <th class="px-3 py-2">Status</th>
+                            <th class="px-3 py-2 text-right">Action</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800">
+                        @php
+                            $flaggedVariantIds = collect($product->needs_update_reason ?? [])->pluck('variant_id')->filter()->map(fn ($id) => (int) $id)->all();
+                        @endphp
                         @foreach ($sellerListings as $vId => $listing)
-                            <tr wire:key="offer-{{ $vId }}" class="hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
+                            @php
+                                $hasIssue = in_array((int) $vId, $flaggedVariantIds, true);
+                            @endphp
+                            <tr wire:key="offer-{{ $vId }}" class="{{ $hasIssue ? 'bg-amber-50/70 dark:bg-amber-950/40 border-l-4 border-amber-500' : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/50' }}">
                                 <td class="px-3 py-2">
                                     <div class="font-mono font-medium text-zinc-900 dark:text-white">{{ $listing['variant_key'] }}</div>
                                     <div class="font-mono text-[10px] text-zinc-400">{{ $listing['upid'] }}</div>
+                                    @if ($hasIssue)
+                                        <span class="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 mt-1">Issue Flagged</span>
+                                    @endif
                                 </td>
                                 <td class="px-3 py-2">
-                                    <input wire:model="sellerListings.{{ $vId }}.sku" type="text" required
+                                    <input wire:model="sellerListings.{{ $vId }}.sku" type="text"
                                            class="w-36 rounded-md border border-zinc-300 px-2 py-1 text-xs font-mono dark:border-zinc-700 dark:bg-zinc-800 dark:text-white" />
+                                    @error("sellerListings.{$vId}.sku") <p class="text-[10px] text-red-600 dark:text-red-400 mt-0.5">{{ $message }}</p> @enderror
                                 </td>
                                 <td class="px-3 py-2">
-                                    <input wire:model="sellerListings.{{ $vId }}.mrp" type="number" step="0.01" min="1" required
+                                    <input wire:model="sellerListings.{{ $vId }}.mrp" type="number" step="0.01" min="1"
                                            class="w-24 rounded-md border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-800 dark:text-white" />
+                                    @error("sellerListings.{$vId}.mrp") <p class="text-[10px] text-red-600 dark:text-red-400 mt-0.5">{{ $message }}</p> @enderror
                                 </td>
                                 <td class="px-3 py-2">
-                                    <input wire:model="sellerListings.{{ $vId }}.selling_price" type="number" step="0.01" min="1" required
+                                    <input wire:model="sellerListings.{{ $vId }}.selling_price" type="number" step="0.01" min="1"
                                            class="w-24 rounded-md border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-800 dark:text-white" />
+                                    @error("sellerListings.{$vId}.selling_price") <p class="text-[10px] text-red-600 dark:text-red-400 mt-0.5">{{ $message }}</p> @enderror
                                 </td>
                                 <td class="px-3 py-2">
-                                    <input wire:model="sellerListings.{{ $vId }}.stock" type="number" min="0" required
+                                    <input wire:model="sellerListings.{{ $vId }}.stock" type="number" min="0"
                                            class="w-20 rounded-md border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-800 dark:text-white" />
+                                    @error("sellerListings.{$vId}.stock") <p class="text-[10px] text-red-600 dark:text-red-400 mt-0.5">{{ $message }}</p> @enderror
                                 </td>
                                 <td class="px-3 py-2">
                                     <select wire:model="sellerListings.{{ $vId }}.status"
@@ -285,11 +335,26 @@ new #[Layout('layouts.seller')] #[Title('Edit Product')] class extends Component
                                         <option value="inactive">Inactive</option>
                                     </select>
                                 </td>
+                                <td class="px-3 py-2 text-right">
+                                    <button type="button" wire:click="removeVariant({{ $vId }})"
+                                            wire:confirm="Removing this variant listing will deactivate it and hide it from customers. Are you sure you want to proceed?"
+                                            class="text-zinc-400 hover:text-red-600 transition p-1" title="Remove variant offer">
+                                        <svg class="size-4 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                    </button>
+                                </td>
                             </tr>
                         @endforeach
                     </tbody>
                 </table>
             </div>
+
+            @error('general')
+                <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
+                    {{ $message }}
+                </div>
+            @enderror
 
             <div class="flex justify-end pt-3">
                 <button type="submit" data-test="save-offers-btn" class="rounded-lg bg-zinc-900 px-4 py-2 text-xs font-semibold text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 transition shadow-xs">

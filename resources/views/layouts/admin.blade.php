@@ -83,6 +83,25 @@
                         <span>Brands</span>
                     </a>
 
+                    <a href="{{ route('admin.catalog.products') }}"
+                       wire:navigate
+                       class="flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition {{ request()->routeIs('admin.catalog.products*') ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white font-semibold' : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-white' }}">
+                        <div class="flex items-center gap-3">
+                            <svg class="size-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                            </svg>
+                            <span>Products & QC</span>
+                        </div>
+                        @php
+                            $pendingQcCount = \App\Models\Product::where('qc_status', \App\Enums\ProductQcStatus::QcPending)->count();
+                        @endphp
+                        @if ($pendingQcCount > 0)
+                            <span class="inline-flex size-5 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-white">
+                                {{ $pendingQcCount }}
+                            </span>
+                        @endif
+                    </a>
+
                     <div class="pt-3 pb-1">
                         <span class="px-3 text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Settings</span>
                     </div>
@@ -208,6 +227,23 @@
                             <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/>
                         </svg>
                         <span>Brands</span>
+                    </a>
+
+                    <a href="{{ route('admin.catalog.products') }}"
+                       @click="mobileMenuOpen = false"
+                       wire:navigate
+                       class="flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition {{ request()->routeIs('admin.catalog.products*') ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white font-semibold' : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-white' }}">
+                        <div class="flex items-center gap-3">
+                            <svg class="size-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                            </svg>
+                            <span>Products & QC</span>
+                        </div>
+                        @if ($pendingQcCount > 0)
+                            <span class="inline-flex size-5 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-white">
+                                {{ $pendingQcCount }}
+                            </span>
+                        @endif
                     </a>
 
                     <div class="pt-3 pb-1">

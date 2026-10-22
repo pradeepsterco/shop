@@ -2,10 +2,13 @@
 
 use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\EnsureUserIsApprovedSeller;
+use Illuminate\Auth\Middleware\Authenticate;
+use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -24,7 +27,12 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             EnsureUserIsActive::class,
         ]);
-
+        // [SETUP HERE] Adminer Middleware group
+        $middleware->group('adminer', [
+            EncryptCookies::class,
+            StartSession::class,
+            Authenticate::class,
+        ]);
         $middleware->alias([
             'ensure.seller' => EnsureUserIsApprovedSeller::class,
         ]);

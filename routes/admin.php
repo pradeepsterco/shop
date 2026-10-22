@@ -22,6 +22,7 @@ Route::middleware('auth:admin')->group(function () {
     Route::livewire('catalog/verticals', 'pages::admin.catalog.verticals')->name('catalog.verticals');
     Route::livewire('catalog/verticals/{vertical}/attributes', 'pages::admin.catalog.vertical-attributes')->name('catalog.vertical-attributes');
     Route::livewire('catalog/brands', 'pages::admin.catalog.brands')->name('catalog.brands');
+    Route::livewire('catalog/products', 'pages::admin.catalog.products')->name('catalog.products');
 
     Route::livewire('profile', 'pages::admin.profile')->name('profile');
 

@@ -115,6 +115,6 @@ class VerticalAttribute extends Model
             return [];
         }
 
-        return array_values(array_filter($this->options, fn ($opt) => $opt['is_active']));
+        return array_values(array_filter($this->options, fn ($opt) => ! empty($opt['is_active']) && empty($opt['is_retired'])));
     }
 }

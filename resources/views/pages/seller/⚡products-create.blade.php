@@ -13,8 +13,11 @@ use App\Models\ProductImage;
 use App\Models\ProductVariant;
 use App\Models\SellerProfile;
 use App\Models\Vertical;
+use App\Models\VerticalAttribute;
 use App\Services\UpidGenerator;
 use App\Services\VariantKeyNormalizer;
+use App\Services\VariantOfferValidator;
+use App\Services\VariantSyncService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
@@ -326,6 +329,30 @@ new #[Layout('layouts.seller')] #[Title('Add Product')] class extends Component 
         if (in_array($value, $this->selectedVariantOptions[$code], true)) {
             $this->selectedVariantOptions[$code] = array_values(array_diff($this->selectedVariantOptions[$code], [$value]));
         } else {
+            // Guard: Cannot add hidden/retired options to a new variant unless already used on this product
+            $draftProd = $this->draftProductId ? Product::with('variants')->find($this->draftProductId) : null;
+            $varAttr = VerticalAttribute::where('vertical_id', $this->vertical_id)->where('code', $code)->first();
+            if ($varAttr) {
+                $opt = collect($varAttr->options ?? [])->firstWhere('value', $value);
+                $isActive = ! empty($opt['is_active']) && empty($opt['is_retired']);
+
+                $isExistingOnProduct = false;
+                if ($draftProd) {
+                    foreach ($draftProd->variants as $v) {
+                        if (! $v->trashed() && isset($v->variant_attributes[$code]) && (string) $v->variant_attributes[$code] === (string) $value) {
+                            $isExistingOnProduct = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (! $isActive && ! $isExistingOnProduct) {
+                    $this->addError('variantRows', "Option '{$value}' is retired or inactive and cannot be added to a new variant.");
+
+                    return;
+                }
+            }
+
             $this->selectedVariantOptions[$code][] = $value;
         }
 
@@ -381,20 +408,30 @@ new #[Layout('layouts.seller')] #[Title('Add Product')] class extends Component 
             if ($existing) {
                 $newRows[] = $existing;
             } else {
-                $skuSuffix = str_replace([':', '|'], '-', $normKey);
-                $maxTitleLen = max(6, 40 - strlen($skuSuffix) - strlen($brandSlug) - 2);
-                $shortTitle = substr($titleSlug, 0, $maxTitleLen);
-                $suggestedSku = strtoupper("{$brandSlug}-{$shortTitle}-{$skuSuffix}");
+                // If draft already has this variant in DB, retain its id and existing offer values
+                $existingDbVariant = null;
+                $existingListing = null;
+                if ($this->draftProductId) {
+                    $existingDbVariant = ProductVariant::where('product_id', $this->draftProductId)
+                        ->where('variant_key', $normKey)
+                        ->with('listings')
+                        ->first();
+                    if ($existingDbVariant && Auth::user()?->sellerProfile) {
+                        $existingListing = $existingDbVariant->listings->firstWhere('seller_profile_id', Auth::user()->sellerProfile->id);
+                    }
+                }
 
                 $newRows[] = [
+                    'id' => $existingDbVariant?->id,
+                    'variant_id' => $existingDbVariant?->id,
                     'key' => $normKey,
                     'variant_attributes' => $combo,
-                    'sku' => $suggestedSku,
-                    'mrp' => $this->batch_mrp ?: '',
-                    'selling_price' => $this->batch_price ?: '',
-                    'stock' => $this->batch_stock ?: '10',
-                    'barcode' => '',
-                    'weight' => '',
+                    'sku' => $existingListing?->sku ?? '',
+                    'mrp' => $existingListing ? (string) $existingListing->mrpInRupees() : ($this->batch_mrp ?: ''),
+                    'selling_price' => $existingListing ? (string) $existingListing->sellingPriceInRupees() : ($this->batch_price ?: ''),
+                    'stock' => $existingListing ? (string) $existingListing->stock : ($this->batch_stock ?: ''),
+                    'barcode' => $existingDbVariant?->barcode ?? '',
+                    'weight' => (string) ($existingDbVariant?->weight ?? ''),
                 ];
             }
         }
@@ -423,46 +460,54 @@ new #[Layout('layouts.seller')] #[Title('Add Product')] class extends Component 
 
     public function saveStep4(): void
     {
+        $this->autosaveDraft();
+
+        if (! $this->draftProductId) {
+            $this->addError('variantRows', 'Please select a vertical and brand first.');
+
+            return;
+        }
+
         if (empty($this->variantRows)) {
             $this->addError('variantRows', 'Please select at least one variant combination.');
 
             return;
         }
 
-        // Validate each row
-        $seenSkus = [];
-        foreach ($this->variantRows as $idx => $row) {
-            $sku = strtoupper(trim((string) ($row['sku'] ?? '')));
-            if ($sku === '') {
-                $this->addError("variantRows.{$idx}.sku", "SKU is required for variant {$row['key']}");
+        $draft = Product::find($this->draftProductId);
+        /** @var SellerProfile $seller */
+        $seller = Auth::user()->sellerProfile;
 
-                return;
+        $validator = new VariantOfferValidator();
+        $validationResult = $validator->validateRows($this->variantRows, $seller->id, $draft, requireAtLeastOneActive: true);
+
+        if (! empty($validationResult['errors'])) {
+            foreach ($validationResult['errors'] as $key => $msg) {
+                if ($key === 'general') {
+                    $this->addError('variantRows', $msg);
+                } else {
+                    $this->addError("variantRows.{$key}", $msg);
+                }
             }
-            if (in_array($sku, $seenSkus, true)) {
-                $this->addError("variantRows.{$idx}.sku", "Duplicate SKU '{$sku}' cannot be used for multiple variants.");
 
-                return;
-            }
-            $seenSkus[] = $sku;
-
-            if (! is_numeric($row['mrp']) || (float) $row['mrp'] <= 0) {
-                $this->addError("variantRows.{$idx}.mrp", 'MRP must be greater than 0');
-
-                return;
-            }
-            if (! is_numeric($row['selling_price']) || (float) $row['selling_price'] <= 0) {
-                $this->addError("variantRows.{$idx}.selling_price", 'Selling price must be greater than 0');
-
-                return;
-            }
-            if ((float) $row['selling_price'] > (float) $row['mrp']) {
-                $this->addError("variantRows.{$idx}.selling_price", 'Selling price cannot exceed MRP');
-
-                return;
-            }
+            return;
         }
 
-        $this->autosaveDraft();
+        // Sync valid rows to DB via transaction & lock
+        $syncService = new VariantSyncService();
+        $syncService->sync($draft, $seller, $validationResult['validRows']);
+
+        // Update variantRows with fresh DB variant IDs
+        $freshVariants = $draft->variants()->get();
+        foreach ($this->variantRows as &$r) {
+            $matched = $freshVariants->firstWhere('variant_key', $r['key'] ?? '');
+            if ($matched) {
+                $r['id'] = $matched->id;
+                $r['variant_id'] = $matched->id;
+            }
+        }
+        unset($r);
+
         $this->currentStep = 5;
     }
 
@@ -511,44 +556,23 @@ new #[Layout('layouts.seller')] #[Title('Add Product')] class extends Component 
             }
             $this->uploadedImages = [];
         }
-
-        // Save variant rows and listings
-        if (! empty($this->variantRows) && $this->draftProductId) {
-            $draft = Product::find($this->draftProductId);
-            foreach ($this->variantRows as $row) {
-                $variant = ProductVariant::firstOrCreate(
-                    [
-                        'product_id' => $draft->id,
-                        'variant_key' => $row['key'],
-                    ],
-                    [
-                        'variant_attributes' => $row['variant_attributes'],
-                        'barcode' => ! empty($row['barcode']) ? $row['barcode'] : null,
-                        'weight' => ! empty($row['weight']) ? (float) $row['weight'] : null,
-                        'qc_status' => VariantQcStatus::Draft,
-                    ]
-                );
-
-                if (! empty($row['sku']) && ! empty($row['mrp']) && ! empty($row['selling_price'])) {
-                    Listing::createOrRestore([
-                        'seller_profile_id' => $seller->id,
-                        'product_variant_id' => $variant->id,
-                        'sku' => $row['sku'],
-                        'mrp' => (int) round(((float) $row['mrp']) * 100),
-                        'selling_price' => (int) round(((float) $row['selling_price']) * 100),
-                        'stock' => (int) ($row['stock'] ?? 0),
-                        'status' => ListingStatus::Draft,
-                    ]);
-                }
-            }
-        }
     }
 
     public function submitToQc(): void
     {
         $this->autosaveDraft();
 
-        $draft = Product::with(['variants.listings', 'images'])->findOrFail($this->draftProductId);
+        $draft = Product::with(['variants.listings', 'images', 'vertical.attributes'])->findOrFail($this->draftProductId);
+
+        // Check for variant issues or needs_update
+        $issues = $draft->variantIssues();
+        if (! empty($issues) || $draft->needs_update) {
+            $issueSummary = ! empty($issues) ? collect($issues)->pluck('message')->join('; ') : 'Product requires variant updates before QC submission.';
+            session()->flash('qc_error', "Cannot submit for QC: {$issueSummary}");
+            $this->currentStep = 4;
+
+            return;
+        }
 
         // Validate complete product ready for QC
         if (strlen($draft->title) < 5 || strlen($draft->description) < 10) {
@@ -975,26 +999,58 @@ new #[Layout('layouts.seller')] #[Title('Add Product')] class extends Component 
                         </div>
 
                         @if ($this->selectedVerticalModel)
-                            <div class="space-y-4 pt-2">
-                                @foreach ($this->selectedVerticalModel->attributes()->where('is_variant', true)->get() as $varAttr)
-                                    <div class="rounded-lg border border-zinc-100 p-4 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-800/30">
-                                        <h4 class="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider">
-                                            {{ $varAttr->name }}
-                                        </h4>
-                                        <div class="mt-2 flex flex-wrap gap-2">
-                                            @foreach ($varAttr->activeOptions() as $opt)
-                                                <label class="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 cursor-pointer dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 hover:bg-zinc-50">
-                                                    <input type="checkbox"
-                                                           wire:click="toggleVariantOption('{{ $varAttr->code }}', '{{ $opt['value'] }}')"
-                                                           @checked($this->isVariantOptionSelected($varAttr->code, $opt['value']))
-                                                           class="size-3.5 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-800" />
-                                                    <span>{{ $opt['label'] }}</span>
-                                                </label>
-                                            @endforeach
+                            @php
+                                $variantAttributes = $this->selectedVerticalModel->attributes()->where('is_variant', true)->get();
+                            @endphp
+
+                            @if ($variantAttributes->isNotEmpty())
+                                <div class="space-y-4 pt-2">
+                                    @foreach ($variantAttributes as $varAttr)
+                                        <div class="rounded-lg border border-zinc-100 p-4 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-800/30">
+                                            <h4 class="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider">
+                                                {{ $varAttr->name }}
+                                            </h4>
+                                            <div class="mt-2 flex flex-wrap gap-2">
+                                                @php
+                                                    $draftProd = $draftProductId ? \App\Models\Product::with('variants')->find($draftProductId) : null;
+                                                    $availableOpts = $draftProd ? $draftProd->availableOptionsForAttribute($varAttr) : $varAttr->activeOptions();
+                                                @endphp
+                                                @forelse ($availableOpts as $opt)
+                                                    @php
+                                                        $isRet = ! empty($opt['is_retired']);
+                                                    @endphp
+                                                    <label class="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 cursor-pointer dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 hover:bg-zinc-50 {{ $isRet ? 'border-amber-300 dark:border-amber-800/80' : '' }}">
+                                                        <input type="checkbox"
+                                                               wire:click="toggleVariantOption('{{ $varAttr->code }}', '{{ $opt['value'] }}')"
+                                                               @checked($this->isVariantOptionSelected($varAttr->code, $opt['value']))
+                                                               class="size-3.5 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-800" />
+                                                        <span>{{ $opt['label'] }}</span>
+                                                        @if ($isRet)
+                                                            <span class="text-[9px] font-bold text-amber-600 dark:text-amber-400">(Retired)</span>
+                                                        @endif
+                                                    </label>
+                                                @empty
+                                                    <p class="text-xs text-amber-600 dark:text-amber-400">
+                                                        No active options configured for {{ $varAttr->name }} yet.
+                                                    </p>
+                                                @endforelse
+                                            </div>
                                         </div>
+                                    @endforeach
+                                </div>
+                            @else
+                                <div class="rounded-lg border border-amber-200 bg-amber-50/60 p-4 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+                                    <div class="flex items-center gap-2 font-semibold">
+                                        <svg class="size-4 shrink-0 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                                        </svg>
+                                        No variant attributes configured for this vertical ({{ $this->selectedVerticalModel->name }})
                                     </div>
-                                @endforeach
-                            </div>
+                                    <p class="mt-1.5 text-zinc-600 dark:text-zinc-400">
+                                        Products in this category require variant dimensions (such as Size, Color, etc.). Please configure variant attributes with options in <strong>Admin &rarr; Catalog &rarr; Verticals &rarr; Attributes</strong>.
+                                    </p>
+                                </div>
+                            @endif
                         @endif
 
                         @error('variantRows')
@@ -1042,20 +1098,24 @@ new #[Layout('layouts.seller')] #[Title('Add Product')] class extends Component 
                                                     {{ $row['key'] }}
                                                 </td>
                                                 <td class="px-3 py-2">
-                                                    <input wire:model="variantRows.{{ $idx }}.sku" type="text" required
+                                                    <input wire:model="variantRows.{{ $idx }}.sku" type="text" placeholder="e.g. SKU-123"
                                                            class="w-36 rounded-md border border-zinc-300 px-2 py-1 text-xs font-mono dark:border-zinc-700 dark:bg-zinc-800 dark:text-white" />
+                                                    @error("variantRows.{$idx}.sku") <p class="text-[10px] text-red-600 dark:text-red-400 mt-0.5">{{ $message }}</p> @enderror
                                                 </td>
                                                 <td class="px-3 py-2">
-                                                    <input wire:model="variantRows.{{ $idx }}.mrp" type="number" step="0.01" min="1" required
+                                                    <input wire:model="variantRows.{{ $idx }}.mrp" type="number" step="0.01" min="1" placeholder="₹"
                                                            class="w-24 rounded-md border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-800 dark:text-white" />
+                                                    @error("variantRows.{$idx}.mrp") <p class="text-[10px] text-red-600 dark:text-red-400 mt-0.5">{{ $message }}</p> @enderror
                                                 </td>
                                                 <td class="px-3 py-2">
-                                                    <input wire:model="variantRows.{{ $idx }}.selling_price" type="number" step="0.01" min="1" required
+                                                    <input wire:model="variantRows.{{ $idx }}.selling_price" type="number" step="0.01" min="1" placeholder="₹"
                                                            class="w-24 rounded-md border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-800 dark:text-white" />
+                                                    @error("variantRows.{$idx}.selling_price") <p class="text-[10px] text-red-600 dark:text-red-400 mt-0.5">{{ $message }}</p> @enderror
                                                 </td>
                                                 <td class="px-3 py-2">
-                                                    <input wire:model="variantRows.{{ $idx }}.stock" type="number" min="0" required
+                                                    <input wire:model="variantRows.{{ $idx }}.stock" type="number" min="0" placeholder="Qty"
                                                            class="w-20 rounded-md border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-800 dark:text-white" />
+                                                    @error("variantRows.{$idx}.stock") <p class="text-[10px] text-red-600 dark:text-red-400 mt-0.5">{{ $message }}</p> @enderror
                                                 </td>
                                                 <td class="px-3 py-2">
                                                     <input wire:model="variantRows.{{ $idx }}.barcode" type="text" placeholder="EAN / UPC"

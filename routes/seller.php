@@ -9,6 +9,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::middleware(['ensure.seller'])->prefix('seller')->name('seller.')->group(function () {
         Route::livewire('/', 'pages::seller.dashboard')->name('dashboard');
+        Route::livewire('products', 'pages::seller.products-index')->name('products.index');
         Route::livewire('products/create', 'pages::seller.products-create')->name('products.create');
         Route::livewire('products/{product}/edit', 'pages::seller.products-edit')->name('products.edit');
         Route::livewire('profile', 'pages::seller.profile')->name('profile');

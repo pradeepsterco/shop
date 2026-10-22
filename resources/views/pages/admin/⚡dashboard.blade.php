@@ -1,5 +1,8 @@
 <?php
 
+use App\Enums\ProductQcStatus;
+use App\Models\Product;
+use App\Models\SellerProfile;
 use App\Models\User;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
@@ -17,6 +20,18 @@ new #[Layout('layouts.admin')] #[Title('Admin Dashboard')] class extends Compone
     public function newCustomersThisWeek(): int
     {
         return User::where('created_at', '>=', now()->startOfWeek())->count();
+    }
+
+    #[Computed]
+    public function pendingQcProducts(): int
+    {
+        return Product::where('qc_status', ProductQcStatus::QcPending)->count();
+    }
+
+    #[Computed]
+    public function approvedProducts(): int
+    {
+        return Product::where('qc_status', ProductQcStatus::Approved)->count();
     }
 }; ?>
 
@@ -70,6 +85,50 @@ new #[Layout('layouts.admin')] #[Title('Admin Dashboard')] class extends Compone
             </div>
             <div class="mt-4 border-t border-zinc-100 pt-3 dark:border-zinc-800/60">
                 <span class="text-xs text-zinc-500 dark:text-zinc-400">Registered since {{ now()->startOfWeek()->format('M j, Y') }}</span>
+            </div>
+        </div>
+
+        <!-- Products Awaiting QC Card -->
+        <div class="overflow-hidden rounded-xl border border-zinc-200 bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-medium text-zinc-500 dark:text-zinc-400">Products Pending QC</p>
+                    <p class="mt-2 text-3xl font-bold tracking-tight {{ $this->pendingQcProducts > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-zinc-900 dark:text-white' }}" data-test="pending-qc-count">
+                        {{ number_format($this->pendingQcProducts) }}
+                    </p>
+                </div>
+                <div class="flex size-12 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400">
+                    <svg class="size-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                </div>
+            </div>
+            <div class="mt-4 border-t border-zinc-100 pt-3 dark:border-zinc-800/60">
+                <a href="{{ route('admin.catalog.products') }}" wire:navigate class="inline-flex items-center gap-1 text-xs font-medium text-amber-600 hover:text-amber-700 dark:text-amber-400">
+                    <span>Review pending submissions &rarr;</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- Approved Catalog Products Card -->
+        <div class="overflow-hidden rounded-xl border border-zinc-200 bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-medium text-zinc-500 dark:text-zinc-400">Approved Catalog Products</p>
+                    <p class="mt-2 text-3xl font-bold tracking-tight text-zinc-900 dark:text-white" data-test="approved-products-count">
+                        {{ number_format($this->approvedProducts) }}
+                    </p>
+                </div>
+                <div class="flex size-12 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400">
+                    <svg class="size-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                    </svg>
+                </div>
+            </div>
+            <div class="mt-4 border-t border-zinc-100 pt-3 dark:border-zinc-800/60">
+                <a href="{{ route('admin.catalog.products') }}" wire:navigate class="inline-flex items-center gap-1 text-xs font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white">
+                    <span>Manage all products &rarr;</span>
+                </a>
             </div>
         </div>
     </div>

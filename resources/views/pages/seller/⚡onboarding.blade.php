@@ -21,6 +21,7 @@ new #[Layout('layouts.seller')] #[Title('Seller Onboarding')] class extends Comp
     // Step 1: Store Info
     public string $store_name = '';
     public string $store_slug = '';
+    public bool $is_slug_customized = false;
     public string $business_type = 'individual';
     public string $description = '';
     public mixed $logo = null;
@@ -83,9 +84,43 @@ new #[Layout('layouts.seller')] #[Title('Seller Onboarding')] class extends Comp
 
     public function updatedStoreName(string $value): void
     {
-        if ($this->sellerProfile?->status !== SellerStatus::Approved && (empty($this->store_slug) || $this->store_slug === Str::slug(substr($value, 0, -1)))) {
-            $this->store_slug = Str::slug($value);
+        if ($this->sellerProfile?->status === SellerStatus::Approved) {
+            return;
         }
+
+        if (! $this->is_slug_customized) {
+            if (blank($value)) {
+                $this->store_slug = '';
+            } else {
+                $profileId = $this->sellerProfile?->id;
+                $this->store_slug = SellerProfile::generateUniqueSlug($value, $profileId);
+            }
+        }
+    }
+
+    public function updatedStoreSlug(string $value): void
+    {
+        $clean = Str::slug($value);
+        $this->store_slug = $clean;
+
+        if (blank($value) || $clean === Str::slug($this->store_name)) {
+            $this->is_slug_customized = false;
+            if (blank($value) && filled($this->store_name)) {
+                $profileId = $this->sellerProfile?->id;
+                $this->store_slug = SellerProfile::generateUniqueSlug($this->store_name, $profileId);
+            }
+        } else {
+            $this->is_slug_customized = true;
+        }
+    }
+
+    public function generateSlug(): void
+    {
+        $profileId = $this->sellerProfile?->id;
+        $this->store_slug = filled($this->store_name)
+            ? SellerProfile::generateUniqueSlug($this->store_name, $profileId)
+            : '';
+        $this->is_slug_customized = false;
     }
 
     public function goToStep(int $step): void
@@ -98,6 +133,12 @@ new #[Layout('layouts.seller')] #[Title('Seller Onboarding')] class extends Comp
     public function saveStep1(): void
     {
         $profileId = $this->sellerProfile?->id;
+
+        if (blank($this->store_slug) && filled($this->store_name)) {
+            $this->store_slug = SellerProfile::generateUniqueSlug($this->store_name, $profileId);
+        } else {
+            $this->store_slug = Str::slug($this->store_slug);
+        }
 
         $this->validate([
             'store_name' => ['required', 'string', 'min:2', 'max:100'],
@@ -298,6 +339,7 @@ new #[Layout('layouts.seller')] #[Title('Seller Onboarding')] class extends Comp
 
         $this->store_name = $p->store_name;
         $this->store_slug = $p->store_slug;
+        $this->is_slug_customized = filled($p->store_slug) && filled($p->store_name) && $p->store_slug !== Str::slug($p->store_name);
         $this->business_type = $p->business_type;
         $this->description = $p->description ?? '';
         $this->existing_logo_path = $p->logo_path;
@@ -433,10 +475,17 @@ new #[Layout('layouts.seller')] #[Title('Seller Onboarding')] class extends Comp
                     </div>
 
                     <div>
-                        <label for="store_slug" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Store URL Slug *</label>
+                        <div class="flex items-center justify-between">
+                            <label for="store_slug" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Store URL Slug *</label>
+                            @if ($is_slug_customized)
+                                <button type="button" wire:click="generateSlug" class="text-xs font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 transition">
+                                    Reset to store name
+                                </button>
+                            @endif
+                        </div>
                         <div class="mt-1 flex rounded-lg shadow-xs">
                             <span class="inline-flex items-center rounded-l-lg border border-r-0 border-zinc-300 bg-zinc-50 px-3 text-xs text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">/stores/</span>
-                            <input wire:model="store_slug" type="text" id="store_slug" required placeholder="wonderland-toys"
+                            <input wire:model.blur="store_slug" type="text" id="store_slug" required placeholder="wonderland-toys"
                                    class="block w-full min-w-0 rounded-none rounded-r-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-zinc-500 focus:outline-hidden focus:ring-1 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white" />
                         </div>
                         @error('store_slug') <p class="mt-1 text-xs text-red-600 dark:text-red-400">{{ $message }}</p> @enderror

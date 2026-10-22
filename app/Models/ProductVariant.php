@@ -9,6 +9,9 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * @property int $id
@@ -27,11 +30,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class ProductVariant extends Model
 {
+    use SoftDeletes;
+
     protected $fillable = [
         'product_id',
         'upid',
         'variant_key',
         'variant_attributes',
+        'attribute_snapshot',
         'barcode',
         'weight',
         'dimensions',
@@ -43,6 +49,7 @@ class ProductVariant extends Model
     {
         return [
             'variant_attributes' => 'array',
+            'attribute_snapshot' => 'array',
             'dimensions' => 'array',
             'weight' => 'float',
             'qc_status' => VariantQcStatus::class,
@@ -105,5 +112,70 @@ class ProductVariant extends Model
             'qc_status' => VariantQcStatus::Rejected,
             'qc_notes' => $notes,
         ]);
+    }
+
+    /**
+     * Check if variant has order/cart/wishlist history.
+     */
+    public function hasHistory(): bool
+    {
+        if (Schema::hasTable('order_items') && DB::table('order_items')->where('product_variant_id', $this->id)->exists()) {
+            return true;
+        }
+
+        if (Schema::hasTable('cart_items') && DB::table('cart_items')->where('product_variant_id', $this->id)->exists()) {
+            return true;
+        }
+
+        if (Schema::hasTable('wishlist_items') && DB::table('wishlist_items')->where('product_variant_id', $this->id)->exists()) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Look up current option label by slug with fallback to snapshot label.
+     */
+    public function optionDisplayLabel(string $attrCode): string
+    {
+        $val = $this->variant_attributes[$attrCode] ?? ($this->attribute_snapshot[$attrCode]['value'] ?? null);
+        if ($val === null || $val === '') {
+            return '';
+        }
+
+        // Try lookup in current vertical attribute options
+        $vertical = $this->product?->vertical;
+        if ($vertical) {
+            $attrs = $vertical->relationLoaded('attributes') ? $vertical->getRelation('attributes') : $vertical->attributes()->get();
+            $attr = $attrs->firstWhere('code', $attrCode);
+            if ($attr && is_array($attr->options)) {
+                foreach ($attr->options as $opt) {
+                    if (($opt['value'] ?? '') === (string) $val && ! empty($opt['label'])) {
+                        return $opt['label'];
+                    }
+                }
+            }
+        }
+
+        // Fall back to snapshot label
+        return $this->attribute_snapshot[$attrCode]['label'] ?? (string) $val;
+    }
+
+    /**
+     * Formats user-facing variant title from snapshot/current labels.
+     */
+    public function displayTitle(): string
+    {
+        if (empty($this->variant_attributes)) {
+            return $this->upid;
+        }
+
+        $labels = [];
+        foreach ($this->variant_attributes as $code => $val) {
+            $labels[] = $this->optionDisplayLabel($code);
+        }
+
+        return implode(' / ', array_filter($labels)) ?: $this->variant_key;
     }
 }

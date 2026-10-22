@@ -188,3 +188,55 @@ test('rejected seller can view rejection reason and resubmit', function () {
 
     expect($profile->fresh()->status)->toBe(SellerStatus::Pending);
 });
+
+test('store slug is dynamically generated from store name', function () {
+    $user = User::factory()->create();
+
+    Livewire::actingAs($user)
+        ->test('pages::seller.onboarding')
+        ->set('store_name', 'Origin Mart')
+        ->assertSet('store_slug', 'origin-mart');
+});
+
+test('store slug updates dynamically when store name is modified or replaced', function () {
+    $user = User::factory()->create();
+
+    // User first types "test", then renames to "Origin Mart"
+    Livewire::actingAs($user)
+        ->test('pages::seller.onboarding')
+        ->set('store_name', 'test')
+        ->assertSet('store_slug', 'test')
+        ->set('store_name', 'Origin Mart')
+        ->assertSet('store_slug', 'origin-mart');
+});
+
+test('store slug auto-increments if identical slug already exists', function () {
+    $existing = User::factory()->create();
+    SellerProfile::factory()->create([
+        'user_id' => $existing->id,
+        'store_slug' => 'origin-mart',
+    ]);
+
+    $user = User::factory()->create();
+
+    Livewire::actingAs($user)
+        ->test('pages::seller.onboarding')
+        ->set('store_name', 'Origin Mart')
+        ->assertSet('store_slug', 'origin-mart-1');
+});
+
+test('manually customized store slug is preserved when store name changes', function () {
+    $user = User::factory()->create();
+
+    Livewire::actingAs($user)
+        ->test('pages::seller.onboarding')
+        ->set('store_name', 'Origin Mart')
+        ->assertSet('store_slug', 'origin-mart')
+        ->set('store_slug', 'custom-outlet')
+        ->assertSet('is_slug_customized', true)
+        ->set('store_name', 'Super Origin Mart')
+        ->assertSet('store_slug', 'custom-outlet')
+        ->call('generateSlug')
+        ->assertSet('store_slug', 'super-origin-mart')
+        ->assertSet('is_slug_customized', false);
+});
