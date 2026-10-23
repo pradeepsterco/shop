@@ -13,7 +13,7 @@ use Illuminate\Support\Str;
  * @property string $name
  * @property string $code
  * @property AttributeType $type
- * @property array<int, array{label: string, value: string, is_active: bool}>|null $options
+ * @property array<int, array{label: string, value: string, is_active: bool, is_retired?: bool}>|null $options
  * @property string|null $unit
  * @property bool $is_required
  * @property bool $is_variant
@@ -107,7 +107,7 @@ class VerticalAttribute extends Model
     /**
      * Return only active options for seller selection.
      *
-     * @return array<int, array{label: string, value: string, is_active: bool}>
+     * @return array<int, array{label: string, value: string, is_active: bool, is_retired?: bool}>
      */
     public function activeOptions(): array
     {

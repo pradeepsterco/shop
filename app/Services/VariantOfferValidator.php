@@ -77,7 +77,7 @@ class VariantOfferValidator
                 if ($ev->variant_key) {
                     $productVariantIdsByKey[$ev->variant_key] = $ev->id;
                 }
-                if (! $ev->trashed() && is_array($ev->variant_attributes)) {
+                if (! $ev->trashed()) {
                     foreach ($ev->variant_attributes as $c => $v) {
                         $existingProductOptionValues[$c][] = (string) $v;
                     }
@@ -174,7 +174,7 @@ class VariantOfferValidator
                         $options = is_array($attr->options) ? $attr->options : [];
                         $matched = null;
                         foreach ($options as $opt) {
-                            if (($opt['value'] ?? '') === (string) $optVal) {
+                            if ($opt['value'] === (string) $optVal) {
                                 $matched = $opt;
                                 break;
                             }
@@ -187,7 +187,7 @@ class VariantOfferValidator
                         } elseif ($matched && ! $isAllowedExistingOption) {
                             if (! empty($matched['is_retired'])) {
                                 $rowErrors['options'] = "Option '{$optVal}' is retired and cannot be added to a new variant.";
-                            } elseif (isset($matched['is_active']) && ! $matched['is_active']) {
+                            } elseif (! $matched['is_active']) {
                                 $rowErrors['options'] = "Option '{$optVal}' is hidden and cannot be added to a new variant.";
                             }
                         }

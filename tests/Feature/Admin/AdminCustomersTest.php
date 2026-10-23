@@ -5,7 +5,7 @@ use App\Models\User;
 use Livewire\Livewire;
 
 test('admin can view customer list', function () {
-    $admin = Admin::factory()->create();
+    $admin = Admin::factory()->superAdmin()->create();
     $customer = User::factory()->create(['name' => 'Alice Customer', 'email' => 'alice@example.com']);
 
     $response = $this->actingAs($admin, 'admin')->get(route('admin.customers'));
@@ -16,7 +16,7 @@ test('admin can view customer list', function () {
 });
 
 test('admin can search customers', function () {
-    $admin = Admin::factory()->create();
+    $admin = Admin::factory()->superAdmin()->create();
     User::factory()->create(['name' => 'Alice Customer', 'email' => 'alice@example.com']);
     User::factory()->create(['name' => 'Bob Customer', 'email' => 'bob@example.com']);
 
@@ -31,7 +31,7 @@ test('admin can search customers', function () {
 });
 
 test('admin can view customer details page', function () {
-    $admin = Admin::factory()->create();
+    $admin = Admin::factory()->superAdmin()->create();
     $customer = User::factory()->create([
         'name' => 'Charlie Details',
         'email' => 'charlie@example.com',
@@ -48,7 +48,7 @@ test('admin can view customer details page', function () {
 });
 
 test('admin can toggle customer active status from customers list', function () {
-    $admin = Admin::factory()->create();
+    $admin = Admin::factory()->superAdmin()->create();
     $customer = User::factory()->create(['is_active' => true]);
 
     Livewire::actingAs($admin, 'admin')
@@ -65,7 +65,7 @@ test('admin can toggle customer active status from customers list', function () 
 });
 
 test('admin can toggle customer active status from customer details page', function () {
-    $admin = Admin::factory()->create();
+    $admin = Admin::factory()->superAdmin()->create();
     $customer = User::factory()->create(['is_active' => true]);
 
     Livewire::actingAs($admin, 'admin')

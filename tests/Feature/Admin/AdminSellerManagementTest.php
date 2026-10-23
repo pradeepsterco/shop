@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Mail;
 use Livewire\Livewire;
 
 test('admin can view seller applications list and filter by status', function () {
-    $admin = Admin::factory()->create();
+    $admin = Admin::factory()->superAdmin()->create();
 
     $pending = SellerProfile::factory()->pending()->create(['store_name' => 'Pending Toys']);
     $approved = SellerProfile::factory()->approved()->create(['store_name' => 'Approved Toys']);
@@ -30,7 +30,7 @@ test('admin can view seller applications list and filter by status', function ()
 });
 
 test('admin sellers index shows bank details changed badge', function () {
-    $admin = Admin::factory()->create();
+    $admin = Admin::factory()->superAdmin()->create();
 
     $seller = SellerProfile::factory()->approved()->create([
         'store_name' => 'Bank Alert Store',
@@ -45,7 +45,7 @@ test('admin sellers index shows bank details changed badge', function () {
 
 test('admin can approve seller application and email is queued', function () {
     Mail::fake();
-    $admin = Admin::factory()->create();
+    $admin = Admin::factory()->superAdmin()->create();
     $user = User::factory()->create(['email' => 'applicant@example.com']);
     $profile = SellerProfile::factory()->pending()->create([
         'user_id' => $user->id,
@@ -70,7 +70,7 @@ test('admin can approve seller application and email is queued', function () {
 
 test('admin can reject seller application with reason and email is queued', function () {
     Mail::fake();
-    $admin = Admin::factory()->create();
+    $admin = Admin::factory()->superAdmin()->create();
     $user = User::factory()->create(['email' => 'applicant2@example.com']);
     $profile = SellerProfile::factory()->pending()->create([
         'user_id' => $user->id,
@@ -94,7 +94,7 @@ test('admin can reject seller application with reason and email is queued', func
 });
 
 test('admin can suspend and reactivate seller', function () {
-    $admin = Admin::factory()->create();
+    $admin = Admin::factory()->superAdmin()->create();
     $profile = SellerProfile::factory()->approved()->create();
 
     // Suspend
@@ -115,7 +115,7 @@ test('admin can suspend and reactivate seller', function () {
 });
 
 test('status transitions are strictly guarded and invalid transitions throw', function () {
-    $admin = Admin::factory()->create();
+    $admin = Admin::factory()->superAdmin()->create();
 
     // Cannot approve a draft
     $draft = SellerProfile::factory()->create(['status' => SellerStatus::Draft]);

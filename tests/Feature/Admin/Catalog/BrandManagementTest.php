@@ -12,7 +12,7 @@ use App\Models\Vertical;
 use Livewire\Livewire;
 
 test('admin can view brand directory and search', function () {
-    $admin = Admin::factory()->create();
+    $admin = Admin::factory()->superAdmin()->create();
     Brand::create(['name' => 'Nike', 'status' => BrandStatus::Approved]);
     Brand::create(['name' => 'Adidas', 'status' => BrandStatus::Approved]);
 
@@ -26,7 +26,7 @@ test('admin can view brand directory and search', function () {
 });
 
 test('admin can create and auto-approve a brand', function () {
-    $admin = Admin::factory()->create();
+    $admin = Admin::factory()->superAdmin()->create();
 
     Livewire::actingAs($admin, 'admin')
         ->test('pages::admin.catalog.brands')
@@ -42,7 +42,7 @@ test('admin can create and auto-approve a brand', function () {
 });
 
 test('admin can approve a seller-requested brand', function () {
-    $admin = Admin::factory()->create();
+    $admin = Admin::factory()->superAdmin()->create();
     $user = User::factory()->create();
     $seller = SellerProfile::factory()->create(['user_id' => $user->id]);
 
@@ -63,7 +63,7 @@ test('admin can approve a seller-requested brand', function () {
 });
 
 test('admin can reject a seller-requested brand and associated products revert to rejected', function () {
-    $admin = Admin::factory()->create();
+    $admin = Admin::factory()->superAdmin()->create();
     $user = User::factory()->create();
     $seller = SellerProfile::factory()->create(['user_id' => $user->id]);
 

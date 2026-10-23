@@ -34,6 +34,7 @@
                         <span>Dashboard</span>
                     </a>
 
+                    @can('customers.view')
                     <a href="{{ route('admin.customers') }}"
                        wire:navigate
                        class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition {{ request()->routeIs('admin.customers*') ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white font-semibold' : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-white' }}">
@@ -42,7 +43,9 @@
                         </svg>
                         <span>Customers</span>
                     </a>
+                    @endcan
 
+                    @can('sellers.view')
                     <a href="{{ route('admin.sellers.index') }}"
                        wire:navigate
                        class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition {{ request()->routeIs('admin.sellers*') ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white font-semibold' : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-white' }}">
@@ -51,11 +54,14 @@
                         </svg>
                         <span>Sellers</span>
                     </a>
+                    @endcan
 
+                    @canany(['catalog.categories', 'catalog.verticals', 'catalog.brands.manage', 'catalog.products.view'])
                     <div class="pt-3 pb-1">
                         <span class="px-3 text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Catalog</span>
                     </div>
 
+                    @can('catalog.categories')
                     <a href="{{ route('admin.catalog.categories') }}"
                        wire:navigate
                        class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition {{ request()->routeIs('admin.catalog.categories*') ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white font-semibold' : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-white' }}">
@@ -64,7 +70,9 @@
                         </svg>
                         <span>Categories</span>
                     </a>
+                    @endcan
 
+                    @can('catalog.verticals')
                     <a href="{{ route('admin.catalog.verticals') }}"
                        wire:navigate
                        class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition {{ request()->routeIs('admin.catalog.verticals*') || request()->routeIs('admin.catalog.vertical-attributes*') ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white font-semibold' : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-white' }}">
@@ -73,7 +81,9 @@
                         </svg>
                         <span>Verticals</span>
                     </a>
+                    @endcan
 
+                    @can('catalog.brands.manage')
                     <a href="{{ route('admin.catalog.brands') }}"
                        wire:navigate
                        class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition {{ request()->routeIs('admin.catalog.brands*') ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white font-semibold' : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-white' }}">
@@ -82,7 +92,9 @@
                         </svg>
                         <span>Brands</span>
                     </a>
+                    @endcan
 
+                    @can('catalog.products.view')
                     <a href="{{ route('admin.catalog.products') }}"
                        wire:navigate
                        class="flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition {{ request()->routeIs('admin.catalog.products*') ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white font-semibold' : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-white' }}">
@@ -101,10 +113,45 @@
                             </span>
                         @endif
                     </a>
+                    @endcan
+                    @endcanany
 
                     <div class="pt-3 pb-1">
                         <span class="px-3 text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Settings</span>
                     </div>
+
+                    @can('admins.view')
+                    <a href="{{ route('admin.staff') }}"
+                       wire:navigate
+                       class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition {{ request()->routeIs('admin.staff*') ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white font-semibold' : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-white' }}">
+                        <svg class="size-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+                        </svg>
+                        <span>Staff Management</span>
+                    </a>
+                    @endcan
+
+                    @can('roles.manage')
+                    <a href="{{ route('admin.roles') }}"
+                       wire:navigate
+                       class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition {{ request()->routeIs('admin.roles*') ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white font-semibold' : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-white' }}">
+                        <svg class="size-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                        </svg>
+                        <span>Roles & Permissions</span>
+                    </a>
+                    @endcan
+
+                    @can('audit.view')
+                    <a href="{{ route('admin.activity-logs') }}"
+                       wire:navigate
+                       class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition {{ request()->routeIs('admin.activity-logs*') ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white font-semibold' : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-white' }}">
+                        <svg class="size-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <span>Activity Logs</span>
+                    </a>
+                    @endcan
 
                     <a href="{{ route('admin.profile') }}"
                        wire:navigate
@@ -175,6 +222,7 @@
                         <span>Dashboard</span>
                     </a>
 
+                    @can('customers.view')
                     <a href="{{ route('admin.customers') }}"
                        @click="mobileMenuOpen = false"
                        wire:navigate
@@ -184,7 +232,9 @@
                         </svg>
                         <span>Customers</span>
                     </a>
+                    @endcan
 
+                    @can('sellers.view')
                     <a href="{{ route('admin.sellers.index') }}"
                        @click="mobileMenuOpen = false"
                        wire:navigate
@@ -194,11 +244,14 @@
                         </svg>
                         <span>Sellers</span>
                     </a>
+                    @endcan
 
+                    @canany(['catalog.categories', 'catalog.verticals', 'catalog.brands.manage', 'catalog.products.view'])
                     <div class="pt-3 pb-1">
                         <span class="px-3 text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Catalog</span>
                     </div>
 
+                    @can('catalog.categories')
                     <a href="{{ route('admin.catalog.categories') }}"
                        @click="mobileMenuOpen = false"
                        wire:navigate
@@ -208,7 +261,9 @@
                         </svg>
                         <span>Categories</span>
                     </a>
+                    @endcan
 
+                    @can('catalog.verticals')
                     <a href="{{ route('admin.catalog.verticals') }}"
                        @click="mobileMenuOpen = false"
                        wire:navigate
@@ -218,7 +273,9 @@
                         </svg>
                         <span>Verticals</span>
                     </a>
+                    @endcan
 
+                    @can('catalog.brands.manage')
                     <a href="{{ route('admin.catalog.brands') }}"
                        @click="mobileMenuOpen = false"
                        wire:navigate
@@ -228,7 +285,9 @@
                         </svg>
                         <span>Brands</span>
                     </a>
+                    @endcan
 
+                    @can('catalog.products.view')
                     <a href="{{ route('admin.catalog.products') }}"
                        @click="mobileMenuOpen = false"
                        wire:navigate
@@ -245,10 +304,48 @@
                             </span>
                         @endif
                     </a>
+                    @endcan
+                    @endcanany
 
                     <div class="pt-3 pb-1">
                         <span class="px-3 text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Settings</span>
                     </div>
+
+                    @can('admins.view')
+                    <a href="{{ route('admin.staff') }}"
+                       @click="mobileMenuOpen = false"
+                       wire:navigate
+                       class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition {{ request()->routeIs('admin.staff*') ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white font-semibold' : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-white' }}">
+                        <svg class="size-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+                        </svg>
+                        <span>Staff Management</span>
+                    </a>
+                    @endcan
+
+                    @can('roles.manage')
+                    <a href="{{ route('admin.roles') }}"
+                       @click="mobileMenuOpen = false"
+                       wire:navigate
+                       class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition {{ request()->routeIs('admin.roles*') ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white font-semibold' : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-white' }}">
+                        <svg class="size-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                        </svg>
+                        <span>Roles & Permissions</span>
+                    </a>
+                    @endcan
+
+                    @can('audit.view')
+                    <a href="{{ route('admin.activity-logs') }}"
+                       @click="mobileMenuOpen = false"
+                       wire:navigate
+                       class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition {{ request()->routeIs('admin.activity-logs*') ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white font-semibold' : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-white' }}">
+                        <svg class="size-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <span>Activity Logs</span>
+                    </a>
+                    @endcan
 
                     <a href="{{ route('admin.profile') }}"
                        @click="mobileMenuOpen = false"

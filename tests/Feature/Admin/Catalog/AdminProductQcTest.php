@@ -17,7 +17,7 @@ use App\Models\Vertical;
 use Livewire\Livewire;
 
 test('admin can view products list and filter by QC status', function () {
-    $admin = Admin::factory()->create();
+    $admin = Admin::factory()->superAdmin()->create();
 
     $cat = Category::create(['name' => 'Clothing']);
     $vert = Vertical::create(['category_id' => $cat->id, 'name' => 'T-Shirt', 'hsn_code' => '6109', 'gst_rate' => 5]);
@@ -55,7 +55,7 @@ test('admin can view products list and filter by QC status', function () {
 });
 
 test('admin can approve a product and its variants and activate seller listings', function () {
-    $admin = Admin::factory()->create();
+    $admin = Admin::factory()->superAdmin()->create();
 
     $user = User::factory()->create();
     $seller = SellerProfile::factory()->create([
@@ -112,7 +112,7 @@ test('admin can approve a product and its variants and activate seller listings'
 });
 
 test('admin can reject a product with reason', function () {
-    $admin = Admin::factory()->create();
+    $admin = Admin::factory()->superAdmin()->create();
 
     $cat = Category::create(['name' => 'Electronics']);
     $vert = Vertical::create(['category_id' => $cat->id, 'name' => 'Headphones', 'hsn_code' => '8518', 'gst_rate' => 18]);

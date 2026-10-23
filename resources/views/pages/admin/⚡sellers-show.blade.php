@@ -5,6 +5,7 @@ use App\Mail\SellerApplicationApproved;
 use App\Mail\SellerApplicationRejected;
 use App\Models\Admin;
 use App\Models\SellerProfile;
+use App\Services\AdminActivityLogger;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
@@ -22,8 +23,28 @@ new #[Layout('layouts.admin')] #[Title('Review Seller Application')] class exten
         $this->sellerProfile = $sellerProfile->load(['user', 'documents', 'reviewer']);
     }
 
+    public function canViewKyc(): bool
+    {
+        return Auth::guard('admin')->user()?->can('sellers.kyc') ?? false;
+    }
+
+    public function maskKycField(?string $value): string
+    {
+        if (blank($value)) {
+            return 'None';
+        }
+
+        if ($this->canViewKyc()) {
+            return $value;
+        }
+
+        return strlen($value) > 4 ? \Illuminate\Support\Str::mask($value, '•', 0, -4) : str_repeat('•', strlen($value));
+    }
+
     public function approveApplication(): void
     {
+        $this->authorize('sellers.manage');
+
         /** @var Admin $admin */
         $admin = Auth::guard('admin')->user();
 
@@ -33,12 +54,18 @@ new #[Layout('layouts.admin')] #[Title('Review Seller Application')] class exten
             new SellerApplicationApproved($this->sellerProfile)
         );
 
+        AdminActivityLogger::log('seller.approved', $this->sellerProfile, [
+            'store_name' => $this->sellerProfile->store_name,
+        ]);
+
         $this->sellerProfile->refresh();
         session()->flash('status', "Application for [{$this->sellerProfile->store_name}] has been approved.");
     }
 
     public function rejectApplication(): void
     {
+        $this->authorize('sellers.manage');
+
         $this->validate([
             'rejection_reason' => ['required', 'string', 'min:5', 'max:1000'],
         ]);
@@ -52,6 +79,11 @@ new #[Layout('layouts.admin')] #[Title('Review Seller Application')] class exten
             new SellerApplicationRejected($this->sellerProfile, $this->rejection_reason)
         );
 
+        AdminActivityLogger::log('seller.rejected', $this->sellerProfile, [
+            'store_name' => $this->sellerProfile->store_name,
+            'reason' => $this->rejection_reason,
+        ]);
+
         $this->showRejectForm = false;
         $this->rejection_reason = '';
         $this->sellerProfile->refresh();
@@ -61,22 +93,34 @@ new #[Layout('layouts.admin')] #[Title('Review Seller Application')] class exten
 
     public function suspendSeller(): void
     {
+        $this->authorize('sellers.manage');
+
         /** @var Admin $admin */
         $admin = Auth::guard('admin')->user();
 
         $this->sellerProfile->suspend($admin);
         $this->sellerProfile->refresh();
 
+        AdminActivityLogger::log('seller.suspended', $this->sellerProfile, [
+            'store_name' => $this->sellerProfile->store_name,
+        ]);
+
         session()->flash('status', "Seller [{$this->sellerProfile->store_name}] has been suspended.");
     }
 
     public function reactivateSeller(): void
     {
+        $this->authorize('sellers.manage');
+
         /** @var Admin $admin */
         $admin = Auth::guard('admin')->user();
 
         $this->sellerProfile->reactivate($admin);
         $this->sellerProfile->refresh();
+
+        AdminActivityLogger::log('seller.reactivated', $this->sellerProfile, [
+            'store_name' => $this->sellerProfile->store_name,
+        ]);
 
         session()->flash('status', "Seller [{$this->sellerProfile->store_name}] has been reactivated.");
     }
@@ -233,15 +277,25 @@ new #[Layout('layouts.admin')] #[Title('Review Seller Application')] class exten
 
     <!-- Tax & Bank Details -->
     <div class="rounded-xl border border-zinc-200 bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
-        <h3 class="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Tax & Bank Account Records (Encrypted in Storage)</h3>
+        <div class="flex items-center justify-between">
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Tax & Bank Account Records (Encrypted in Storage)</h3>
+            @if (! $this->canViewKyc())
+                <span class="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
+                    <svg class="size-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                    </svg>
+                    <span>Masked (KYC permission required)</span>
+                </span>
+            @endif
+        </div>
         <dl class="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
             <div class="rounded-lg border border-zinc-100 bg-zinc-50/50 p-3 dark:border-zinc-800/80 dark:bg-zinc-800/30">
                 <dt class="text-zinc-500">PAN Card</dt>
-                <dd class="mt-1 font-semibold uppercase text-zinc-900 dark:text-white">{{ $sellerProfile->pan }}</dd>
+                <dd class="mt-1 font-semibold uppercase text-zinc-900 dark:text-white" data-test="pan-value">{{ $this->maskKycField($sellerProfile->pan) }}</dd>
             </div>
             <div class="rounded-lg border border-zinc-100 bg-zinc-50/50 p-3 dark:border-zinc-800/80 dark:bg-zinc-800/30">
                 <dt class="text-zinc-500">GSTIN</dt>
-                <dd class="mt-1 font-semibold uppercase text-zinc-900 dark:text-white">{{ $sellerProfile->gstin ?: 'None' }}</dd>
+                <dd class="mt-1 font-semibold uppercase text-zinc-900 dark:text-white" data-test="gstin-value">{{ $this->maskKycField($sellerProfile->gstin) }}</dd>
             </div>
             <div class="rounded-lg border border-zinc-100 bg-zinc-50/50 p-3 dark:border-zinc-800/80 dark:bg-zinc-800/30">
                 <dt class="text-zinc-500">Beneficiary Name</dt>
@@ -249,7 +303,7 @@ new #[Layout('layouts.admin')] #[Title('Review Seller Application')] class exten
             </div>
             <div class="rounded-lg border border-zinc-100 bg-zinc-50/50 p-3 dark:border-zinc-800/80 dark:bg-zinc-800/30">
                 <dt class="text-zinc-500">Account Number & IFSC</dt>
-                <dd class="mt-1 font-semibold text-zinc-900 dark:text-white">{{ $sellerProfile->bank_account_number }} ({{ $sellerProfile->ifsc }})</dd>
+                <dd class="mt-1 font-semibold text-zinc-900 dark:text-white" data-test="bank-account-value">{{ $this->maskKycField($sellerProfile->bank_account_number) }} ({{ $sellerProfile->ifsc }})</dd>
             </div>
         </dl>
     </div>
@@ -270,10 +324,20 @@ new #[Layout('layouts.admin')] #[Title('Review Seller Application')] class exten
                             {{ $doc->original_name }}
                         </div>
                     </div>
-                    <a href="{{ route('admin.sellers.documents.show', $doc) }}" target="_blank"
-                       class="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 transition">
-                        Download / View
-                    </a>
+                    @if ($this->canViewKyc())
+                        <a href="{{ route('admin.sellers.documents.show', $doc) }}" target="_blank"
+                           class="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 transition"
+                           data-test="kyc-doc-download">
+                            Download / View
+                        </a>
+                    @else
+                        <span class="inline-flex items-center gap-1 rounded-lg border border-zinc-200 bg-zinc-100 px-3 py-1.5 text-xs font-medium text-zinc-400 dark:border-zinc-800 dark:bg-zinc-800/60 dark:text-zinc-500 cursor-not-allowed">
+                            <svg class="size-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                            </svg>
+                            <span>Locked</span>
+                        </span>
+                    @endif
                 </div>
             @empty
                 <div class="col-span-2 text-center py-6 text-xs text-zinc-400">

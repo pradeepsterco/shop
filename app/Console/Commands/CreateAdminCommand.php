@@ -50,12 +50,13 @@ class CreateAdminCommand extends Command
             return self::FAILURE;
         }
 
-        $admin = Admin::create([
+        $admin = (new Admin)->forceFill([
             'name' => $name,
             'email' => $email,
             'password' => Hash::make($password),
             'is_active' => true,
         ]);
+        $admin->save();
 
         $this->info("Admin [{$admin->email}] created successfully.");
 

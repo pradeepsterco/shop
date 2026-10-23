@@ -37,6 +37,8 @@ new #[Layout('layouts.admin')] #[Title('Manage Categories')] class extends Compo
 
     public function openCreateModal(?int $parentId = null): void
     {
+        $this->authorize('catalog.categories');
+
         $this->reset(['name', 'editingCategoryId']);
         $this->parent_id = $parentId;
         $this->sort_order = 0;
@@ -45,6 +47,8 @@ new #[Layout('layouts.admin')] #[Title('Manage Categories')] class extends Compo
 
     public function openEditModal(int $id): void
     {
+        $this->authorize('catalog.categories');
+
         $category = Category::findOrFail($id);
         $this->editingCategoryId = $category->id;
         $this->name = $category->name;
@@ -55,6 +59,8 @@ new #[Layout('layouts.admin')] #[Title('Manage Categories')] class extends Compo
 
     public function saveCategory(): void
     {
+        $this->authorize('catalog.categories');
+
         $this->validate();
 
         if ($this->editingCategoryId) {
@@ -91,6 +97,8 @@ new #[Layout('layouts.admin')] #[Title('Manage Categories')] class extends Compo
 
     public function toggleActive(int $id): void
     {
+        $this->authorize('catalog.categories');
+
         $category = Category::with('children')->findOrFail($id);
 
         if ($category->is_active) {

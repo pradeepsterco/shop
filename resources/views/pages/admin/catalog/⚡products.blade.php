@@ -6,6 +6,7 @@ use App\Enums\VariantQcStatus;
 use App\Models\Admin;
 use App\Models\Product;
 use App\Models\Vertical;
+use App\Services\AdminActivityLogger;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
@@ -44,6 +45,8 @@ new #[Layout('layouts.admin')] #[Title('Product Catalog & QC Review')] class ext
 
     public function openReviewModal(int $id): void
     {
+        $this->authorize('catalog.qc');
+
         $this->selectedProductId = $id;
         $this->review_notes = '';
         $this->showReviewModal = true;
@@ -58,6 +61,8 @@ new #[Layout('layouts.admin')] #[Title('Product Catalog & QC Review')] class ext
 
     public function openRejectModal(int $id): void
     {
+        $this->authorize('catalog.qc');
+
         $this->selectedProductId = $id;
         $this->rejection_reason = '';
         $this->showRejectModal = true;
@@ -72,6 +77,8 @@ new #[Layout('layouts.admin')] #[Title('Product Catalog & QC Review')] class ext
 
     public function approveProduct(int $id): void
     {
+        $this->authorize('catalog.qc');
+
         /** @var Admin $admin */
         $admin = Auth::user();
 
@@ -97,11 +104,20 @@ new #[Layout('layouts.admin')] #[Title('Product Catalog & QC Review')] class ext
         }
 
         $this->closeReviewModal();
+
+        AdminActivityLogger::log('product.qc_approved', $product, [
+            'product_id' => $product->id,
+            'title' => $product->title,
+            'notes' => $this->review_notes ?: null,
+        ]);
+
         session()->flash('status', "Product [{$product->title}] and its variants have been successfully approved.");
     }
 
     public function confirmReject(): void
     {
+        $this->authorize('catalog.qc');
+
         $this->validate([
             'rejection_reason' => ['required', 'string', 'min:5', 'max:1000'],
         ]);
@@ -121,6 +137,12 @@ new #[Layout('layouts.admin')] #[Title('Product Catalog & QC Review')] class ext
         foreach ($product->variants as $variant) {
             $variant->reject($this->rejection_reason);
         }
+
+        AdminActivityLogger::log('product.qc_rejected', $product, [
+            'product_id' => $product->id,
+            'title' => $product->title,
+            'reason' => $this->rejection_reason,
+        ]);
 
         $this->closeRejectModal();
         $this->closeReviewModal();

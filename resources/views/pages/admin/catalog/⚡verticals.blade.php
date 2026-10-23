@@ -44,6 +44,8 @@ new #[Layout('layouts.admin')] #[Title('Manage Verticals')] class extends Compon
 
     public function openCreateModal(): void
     {
+        $this->authorize('catalog.verticals');
+
         $this->reset(['name', 'category_id', 'hsn_code', 'gst_rate', 'is_active', 'editingVerticalId']);
         $this->gst_rate = '18.00';
         $this->is_active = true;
@@ -52,6 +54,8 @@ new #[Layout('layouts.admin')] #[Title('Manage Verticals')] class extends Compon
 
     public function openEditModal(int $id): void
     {
+        $this->authorize('catalog.verticals');
+
         $v = Vertical::findOrFail($id);
         $this->editingVerticalId = $v->id;
         $this->name = $v->name;
@@ -64,6 +68,8 @@ new #[Layout('layouts.admin')] #[Title('Manage Verticals')] class extends Compon
 
     public function saveVertical(): void
     {
+        $this->authorize('catalog.verticals');
+
         $this->validate();
 
         if ($this->editingVerticalId) {
@@ -96,6 +102,8 @@ new #[Layout('layouts.admin')] #[Title('Manage Verticals')] class extends Compon
 
     public function toggleActive(int $id): void
     {
+        $this->authorize('catalog.verticals');
+
         $v = Vertical::findOrFail($id);
         $v->update(['is_active' => ! $v->is_active]);
 

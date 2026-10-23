@@ -11,6 +11,7 @@ use App\Models\ProductVariant;
 use App\Models\SellerProfile;
 use App\Models\User;
 use DomainException;
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -169,9 +170,11 @@ class VariantSyncService
      * - Has history or was QC approved: archive listing (inactive, hidden from storefront); keep variant
      * - Block removal of last valid active variant on approved product
      *
+     * @return array{outcome: string, message: string, soft_deleted: bool}
+     *
      * @throws DomainException
      */
-    public function removeVariant(Product $product, SellerProfile $seller, int $variantId, ?User $user = null): array
+    public function removeVariant(Product $product, SellerProfile $seller, int $variantId, ?Authenticatable $user = null): array
     {
         return DB::transaction(function () use ($product, $seller, $variantId, $user) {
             /** @var Product $lockedProduct */
@@ -203,8 +206,10 @@ class VariantSyncService
 
     /**
      * Internal removal logic with logging and outcome resolution.
+     *
+     * @return array{outcome: string, message: string, soft_deleted: bool}
      */
-    protected function handleVariantRemoval(Product $product, SellerProfile $seller, ProductVariant $variant, ?User $user = null): array
+    protected function handleVariantRemoval(Product $product, SellerProfile $seller, ProductVariant $variant, ?Authenticatable $user = null): array
     {
         $hasOtherSellerListing = $variant->listings()
             ->where('seller_profile_id', '!=', $seller->id)
@@ -246,7 +251,7 @@ class VariantSyncService
 
         // Log every removal (user, product, variant, outcome)
         Log::info('Product variant removed', [
-            'user_id' => $user?->id ?? Auth::id(),
+            'user_id' => $user ? $user->getAuthIdentifier() : Auth::id(),
             'seller_profile_id' => $seller->id,
             'product_id' => $product->id,
             'variant_id' => $variant->id,

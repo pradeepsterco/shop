@@ -2,6 +2,7 @@
 
 use App\Enums\BrandStatus;
 use App\Models\Brand;
+use App\Services\AdminActivityLogger;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -33,12 +34,16 @@ new #[Layout('layouts.admin')] #[Title('Brand Management')] class extends Compon
 
     public function openCreateModal(): void
     {
+        $this->authorize('catalog.brands.manage');
+
         $this->reset(['name', 'logo']);
         $this->showCreateModal = true;
     }
 
     public function createBrand(): void
     {
+        $this->authorize('catalog.brands.manage');
+
         $this->validate();
 
         $logoPath = null;
@@ -60,14 +65,23 @@ new #[Layout('layouts.admin')] #[Title('Brand Management')] class extends Compon
 
     public function approveBrand(int $id): void
     {
+        $this->authorize('catalog.brands.review');
+
         $brand = Brand::findOrFail($id);
         $brand->approve();
+
+        AdminActivityLogger::log('brand.approved', $brand, [
+            'brand_id' => $brand->id,
+            'name' => $brand->name,
+        ]);
 
         session()->flash('status', "Brand [{$brand->name}] approved.");
     }
 
     public function openRejectModal(int $id): void
     {
+        $this->authorize('catalog.brands.review');
+
         $this->selectedBrandId = $id;
         $this->rejection_reason = '';
         $this->showRejectModal = true;
@@ -75,6 +89,8 @@ new #[Layout('layouts.admin')] #[Title('Brand Management')] class extends Compon
 
     public function confirmReject(): void
     {
+        $this->authorize('catalog.brands.review');
+
         $this->validate([
             'rejection_reason' => ['required', 'string', 'min:5', 'max:500'],
         ]);
@@ -85,6 +101,12 @@ new #[Layout('layouts.admin')] #[Title('Brand Management')] class extends Compon
 
         $brand = Brand::findOrFail($this->selectedBrandId);
         $brand->reject($this->rejection_reason);
+
+        AdminActivityLogger::log('brand.rejected', $brand, [
+            'brand_id' => $brand->id,
+            'name' => $brand->name,
+            'reason' => $this->rejection_reason,
+        ]);
 
         $this->showRejectModal = false;
         $this->reset(['selectedBrandId', 'rejection_reason']);

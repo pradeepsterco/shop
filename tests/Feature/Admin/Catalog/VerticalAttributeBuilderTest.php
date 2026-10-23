@@ -11,7 +11,7 @@ use App\Models\VerticalAttribute;
 use Livewire\Livewire;
 
 test('admin can view vertical attributes builder', function () {
-    $admin = Admin::factory()->create();
+    $admin = Admin::factory()->superAdmin()->create();
     $cat = Category::create(['name' => 'Topwear']);
     $vertical = Vertical::create([
         'category_id' => $cat->id,
@@ -37,7 +37,7 @@ test('admin can view vertical attributes builder', function () {
 });
 
 test('admin can create a new attribute with options', function () {
-    $admin = Admin::factory()->create();
+    $admin = Admin::factory()->superAdmin()->create();
     $cat = Category::create(['name' => 'Topwear']);
     $vertical = Vertical::create([
         'category_id' => $cat->id,
@@ -80,7 +80,7 @@ test('admin can create a new attribute with options', function () {
 });
 
 test('admin can toggle option active status', function () {
-    $admin = Admin::factory()->create();
+    $admin = Admin::factory()->superAdmin()->create();
     $cat = Category::create(['name' => 'Topwear']);
     $vertical = Vertical::create([
         'category_id' => $cat->id,
@@ -111,7 +111,7 @@ test('admin can toggle option active status', function () {
 });
 
 test('attribute code, type and is_variant are locked when used by catalog products', function () {
-    $admin = Admin::factory()->create();
+    $admin = Admin::factory()->superAdmin()->create();
     $cat = Category::create(['name' => 'Topwear']);
     $vertical = Vertical::create([
         'category_id' => $cat->id,
@@ -164,7 +164,7 @@ test('attribute code, type and is_variant are locked when used by catalog produc
 });
 
 test('used options cannot be deleted from vertical attribute', function () {
-    $admin = Admin::factory()->create();
+    $admin = Admin::factory()->superAdmin()->create();
     $cat = Category::create(['name' => 'Topwear']);
     $vertical = Vertical::create([
         'category_id' => $cat->id,

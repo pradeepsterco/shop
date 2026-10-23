@@ -47,7 +47,7 @@ test('document owner can download document', function () {
 
 test('admin can download document via admin route', function () {
     Storage::fake('local');
-    $admin = Admin::factory()->create();
+    $admin = Admin::factory()->superAdmin()->create();
     $owner = User::factory()->create();
     $profile = SellerProfile::factory()->create(['user_id' => $owner->id]);
 

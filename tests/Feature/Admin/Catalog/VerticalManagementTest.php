@@ -11,7 +11,7 @@ test('guest is redirected when visiting verticals', function () {
 });
 
 test('admin can view verticals list', function () {
-    $admin = Admin::factory()->create();
+    $admin = Admin::factory()->superAdmin()->create();
     $cat = Category::create(['name' => 'Topwear']);
     Vertical::create([
         'category_id' => $cat->id,
@@ -27,7 +27,7 @@ test('admin can view verticals list', function () {
 });
 
 test('admin can create vertical under a leaf category', function () {
-    $admin = Admin::factory()->create();
+    $admin = Admin::factory()->superAdmin()->create();
     $leaf = Category::create(['name' => 'Mobiles']);
 
     Livewire::actingAs($admin, 'admin')
@@ -49,7 +49,7 @@ test('admin can create vertical under a leaf category', function () {
 });
 
 test('admin cannot create vertical under a category with subcategories', function () {
-    $admin = Admin::factory()->create();
+    $admin = Admin::factory()->superAdmin()->create();
     $parent = Category::create(['name' => 'Fashion']);
     Category::create(['name' => 'Men', 'parent_id' => $parent->id]);
 
@@ -67,7 +67,7 @@ test('admin cannot create vertical under a category with subcategories', functio
 });
 
 test('admin can toggle vertical active status', function () {
-    $admin = Admin::factory()->create();
+    $admin = Admin::factory()->superAdmin()->create();
     $leaf = Category::create(['name' => 'Bags']);
     $vertical = Vertical::create([
         'category_id' => $leaf->id,

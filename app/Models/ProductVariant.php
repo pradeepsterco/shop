@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\Schema;
  * @property string $upid
  * @property string $variant_key
  * @property array<string, mixed> $variant_attributes
+ * @property array<string, array{value: string, label: string}>|null $attribute_snapshot
  * @property string|null $barcode
  * @property float|null $weight
  * @property array<string, mixed>|null $dimensions
@@ -145,7 +146,7 @@ class ProductVariant extends Model
         }
 
         // Try lookup in current vertical attribute options
-        $vertical = $this->product?->vertical;
+        $vertical = $this->product->vertical;
         if ($vertical) {
             $attrs = $vertical->relationLoaded('attributes') ? $vertical->getRelation('attributes') : $vertical->attributes()->get();
             $attr = $attrs->firstWhere('code', $attrCode);

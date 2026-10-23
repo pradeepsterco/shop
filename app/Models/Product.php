@@ -348,13 +348,14 @@ class Product extends Model
 
         $available = [];
         foreach ($options as $opt) {
-            $val = (string) ($opt['value'] ?? '');
-            $isActive = ! empty($opt['is_active']) && empty($opt['is_retired']);
+            $val = (string) $opt['value'];
+            $isRetired = ! empty($opt['is_retired']);
+            $isActive = ! empty($opt['is_active']) && ! $isRetired;
             $isExisting = in_array($val, $existingValues, true);
 
             if ($isActive || $isExisting) {
                 $opt['is_existing_on_product'] = $isExisting;
-                $opt['is_retired'] = ! empty($opt['is_retired']);
+                $opt['is_retired'] = $isRetired;
                 $available[] = $opt;
             }
         }

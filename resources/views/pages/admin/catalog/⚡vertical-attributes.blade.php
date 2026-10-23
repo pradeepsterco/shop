@@ -57,6 +57,8 @@ new #[Layout('layouts.admin')] #[Title('Vertical Attributes Builder')] class ext
 
     public function openCreateModal(): void
     {
+        $this->authorize('catalog.attributes');
+
         $this->reset(['name', 'code', 'type', 'unit', 'is_required', 'is_variant', 'editingAttributeId', 'isEditingLocked']);
         $this->type = 'text';
         $this->sort_order = ($this->vertical->attributes()->max('sort_order') ?? 0) + 1;
@@ -65,6 +67,8 @@ new #[Layout('layouts.admin')] #[Title('Vertical Attributes Builder')] class ext
 
     public function openEditModal(int $id): void
     {
+        $this->authorize('catalog.attributes');
+
         $attr = VerticalAttribute::where('vertical_id', $this->vertical->id)->findOrFail($id);
         $this->editingAttributeId = $attr->id;
         $this->name = $attr->name;
@@ -80,6 +84,8 @@ new #[Layout('layouts.admin')] #[Title('Vertical Attributes Builder')] class ext
 
     public function saveAttribute(): void
     {
+        $this->authorize('catalog.attributes');
+
         $this->validate();
 
         if ($this->editingAttributeId) {
@@ -149,6 +155,8 @@ new #[Layout('layouts.admin')] #[Title('Vertical Attributes Builder')] class ext
 
     public function openOptionsModal(int $id): void
     {
+        $this->authorize('catalog.attributes');
+
         $this->managingOptionsAttribute = VerticalAttribute::where('vertical_id', $this->vertical->id)->findOrFail($id);
         $this->reset(['new_option_label', 'new_option_value']);
         $this->showOptionsModal = true;
@@ -163,6 +171,8 @@ new #[Layout('layouts.admin')] #[Title('Vertical Attributes Builder')] class ext
 
     public function addOption(): void
     {
+        $this->authorize('catalog.attributes');
+
         $this->validate([
             'new_option_label' => ['required', 'string', 'min:1', 'max:100'],
             'new_option_value' => ['required', 'string', 'min:1', 'max:100'],
@@ -198,6 +208,8 @@ new #[Layout('layouts.admin')] #[Title('Vertical Attributes Builder')] class ext
 
     public function toggleOptionActive(int $index): void
     {
+        $this->authorize('catalog.attributes');
+
         if (! $this->managingOptionsAttribute) {
             return;
         }
@@ -214,6 +226,8 @@ new #[Layout('layouts.admin')] #[Title('Vertical Attributes Builder')] class ext
 
     public function toggleOptionRetired(int $index): void
     {
+        $this->authorize('catalog.attributes');
+
         if (! $this->managingOptionsAttribute) {
             return;
         }
@@ -235,6 +249,8 @@ new #[Layout('layouts.admin')] #[Title('Vertical Attributes Builder')] class ext
 
     public function removeOption(int $index): void
     {
+        $this->authorize('catalog.attributes');
+
         if (! $this->managingOptionsAttribute) {
             return;
         }
@@ -260,6 +276,8 @@ new #[Layout('layouts.admin')] #[Title('Vertical Attributes Builder')] class ext
 
     public function deleteAttribute(int $id): void
     {
+        $this->authorize('catalog.attributes');
+
         $attr = VerticalAttribute::where('vertical_id', $this->vertical->id)->findOrFail($id);
 
         if ($attr->isUsedInProducts()) {

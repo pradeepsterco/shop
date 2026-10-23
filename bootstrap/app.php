@@ -1,13 +1,16 @@
 <?php
 
+use App\Http\Middleware\AuthenticateAdminSession;
 use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\EnsureUserIsApprovedSeller;
+use App\Http\Middleware\EnsureUserPasswordChanged;
 use Illuminate\Auth\Middleware\Authenticate;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Illuminate\Session\Middleware\AuthenticateSession;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
 
@@ -25,7 +28,10 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->web(append: [
+            AuthenticateSession::class,
             EnsureUserIsActive::class,
+            EnsureUserPasswordChanged::class,
+            AuthenticateAdminSession::class,
         ]);
         // [SETUP HERE] Adminer Middleware group
         $middleware->group('adminer', [
@@ -38,7 +44,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->redirectGuestsTo(function (Request $request) {
-            if ($request->routeIs('admin.*')) {
+            if ($request->routeIs('admin.*') || str_contains((string) $request->header('referer'), '/admin') || $request->is('admin/*') || $request->is('admin')) {
                 return route('admin.login');
             }
 

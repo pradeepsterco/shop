@@ -11,7 +11,7 @@ test('guest is redirected to admin login when visiting categories', function () 
 });
 
 test('admin can view category list and hierarchy', function () {
-    $admin = Admin::factory()->create();
+    $admin = Admin::factory()->superAdmin()->create();
     $parent = Category::create(['name' => 'Fashion', 'sort_order' => 1]);
     $child = Category::create(['name' => 'Men', 'parent_id' => $parent->id, 'sort_order' => 1]);
 
@@ -23,7 +23,7 @@ test('admin can view category list and hierarchy', function () {
 });
 
 test('admin can create root category and subcategory', function () {
-    $admin = Admin::factory()->create();
+    $admin = Admin::factory()->superAdmin()->create();
 
     Livewire::actingAs($admin, 'admin')
         ->test('pages::admin.catalog.categories')
@@ -54,7 +54,7 @@ test('admin can create root category and subcategory', function () {
 });
 
 test('admin cannot add subcategory to a category that has verticals assigned', function () {
-    $admin = Admin::factory()->create();
+    $admin = Admin::factory()->superAdmin()->create();
     $category = Category::create(['name' => 'Shoes']);
     Vertical::create([
         'category_id' => $category->id,
@@ -74,7 +74,7 @@ test('admin cannot add subcategory to a category that has verticals assigned', f
 });
 
 test('deactivating a category deactivates all its descendants', function () {
-    $admin = Admin::factory()->create();
+    $admin = Admin::factory()->superAdmin()->create();
     $root = Category::create(['name' => 'Home', 'is_active' => true]);
     $sub = Category::create(['name' => 'Kitchen', 'parent_id' => $root->id, 'is_active' => true]);
     $leaf = Category::create(['name' => 'Cookware', 'parent_id' => $sub->id, 'is_active' => true]);
