@@ -50,6 +50,7 @@ new #[Layout('layouts.auth')] #[Title('Welcome - Set Your Password')] class exte
         $user->forceFill([
             'password' => Hash::make($this->password),
             'must_change_password' => false,
+            'email_verified_at' => $user->email_verified_at ?? now(),
         ])->save();
 
         Password::broker('users_welcome')->deleteToken($user);

@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Fortify\Contracts\PasskeyUser;
 use Laravel\Fortify\PasskeyAuthenticatable;
@@ -89,6 +90,15 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
      */
     protected static function booted(): void
     {
+        static::saved(function (User $user): void {
+            if (! $user->wasRecentlyCreated && $user->wasChanged('password')) {
+                DB::table('customer_welcome_tokens')
+                    ->where('email', $user->email)
+                    ->orWhere('email', $user->getOriginal('email'))
+                    ->delete();
+            }
+        });
+
         static::deleting(function (User $user): void {
             $user->sellerProfile?->delete();
         });

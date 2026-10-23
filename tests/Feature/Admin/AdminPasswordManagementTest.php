@@ -220,10 +220,12 @@ test('normal forgot-password tokens expire after 60 minutes', function () {
 test('admin-created customer welcome link page sets password with 24-hour expiry', function () {
     $customer = User::factory()->create([
         'password' => Hash::make('InitialPassword123!@#'),
+        'email_verified_at' => null,
     ]);
 
     $welcomeToken = Password::broker('users_welcome')->createToken($customer);
     expect(DB::table('customer_welcome_tokens')->where('email', $customer->email)->exists())->toBeTrue();
+    expect($customer->fresh()->email_verified_at)->toBeNull();
 
     // 1. Travel 120 minutes (2 hours) - past normal 60 min expiry
     $this->travel(120)->minutes();
@@ -240,6 +242,8 @@ test('admin-created customer welcome link page sets password with 24-hour expiry
 
     expect(Hash::check('WelcomeSetPass123!@#', $customer->fresh()->password))->toBeTrue();
     expect(DB::table('customer_welcome_tokens')->where('email', $customer->email)->exists())->toBeFalse();
+    // Welcome page marks email as verified on successful password set
+    expect($customer->fresh()->email_verified_at)->not->toBeNull();
 
     $this->travelBack();
 
@@ -260,7 +264,7 @@ test('admin-created customer welcome link page sets password with 24-hour expiry
     $this->travelBack();
 });
 
-test('customer with pending welcome token can still use normal forgot-password', function () {
+test('customer with pending welcome token has welcome token deleted on forgot-password reset', function () {
     $customer = User::factory()->create([
         'password' => Hash::make('InitialPassword123!@#'),
     ]);
@@ -295,8 +299,49 @@ test('customer with pending welcome token can still use normal forgot-password',
     expect(Hash::check('NormalForgotPass123!@#', $customer->fresh()->password))->toBeTrue();
     // Normal reset token is consumed
     expect(DB::table('password_reset_tokens')->where('email', $customer->email)->exists())->toBeFalse();
-    // Welcome token remains in customer_welcome_tokens
+    // Welcome token is deleted when password is changed through forgot-password flow
+    expect(DB::table('customer_welcome_tokens')->where('email', $customer->email)->exists())->toBeFalse();
+});
+
+test('pending welcome token is deleted when admin resets customer password', function () {
+    $superAdmin = Admin::factory()->superAdmin()->create();
+    $customer = User::factory()->create([
+        'password' => Hash::make('InitialPassword123!@#'),
+    ]);
+
+    Password::broker('users_welcome')->createToken($customer);
     expect(DB::table('customer_welcome_tokens')->where('email', $customer->email)->exists())->toBeTrue();
+
+    Livewire::actingAs($superAdmin, 'admin')
+        ->test('pages::admin.customer-details', ['user' => $customer])
+        ->set('resetMode', 'password')
+        ->set('newPassword', 'AdminSetPass123!@#')
+        ->set('newPassword_confirmation', 'AdminSetPass123!@#')
+        ->call('confirmResetPassword')
+        ->assertHasNoErrors();
+
+    expect(Hash::check('AdminSetPass123!@#', $customer->fresh()->password))->toBeTrue();
+    expect(DB::table('customer_welcome_tokens')->where('email', $customer->email)->exists())->toBeFalse();
+});
+
+test('pending welcome token is deleted when user updates password via profile', function () {
+    $customer = User::factory()->create([
+        'password' => Hash::make('CurrentPassword123!@#'),
+    ]);
+
+    Password::broker('users_welcome')->createToken($customer);
+    expect(DB::table('customer_welcome_tokens')->where('email', $customer->email)->exists())->toBeTrue();
+
+    Livewire::actingAs($customer)
+        ->test('pages::settings.security')
+        ->set('current_password', 'CurrentPassword123!@#')
+        ->set('password', 'NewProfilePassword123!@#')
+        ->set('password_confirmation', 'NewProfilePassword123!@#')
+        ->call('updatePassword')
+        ->assertHasNoErrors();
+
+    expect(Hash::check('NewProfilePassword123!@#', $customer->fresh()->password))->toBeTrue();
+    expect(DB::table('customer_welcome_tokens')->where('email', $customer->email)->exists())->toBeFalse();
 });
 
 // --- 4. STAFF PASSWORD RESET & PRIVILEGE ESCALATION ---
