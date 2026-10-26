@@ -38,6 +38,17 @@
                         <span>Overview</span>
                     </a>
 
+                    <a href="{{ route('seller.orders.index') }}"
+                       @click="mobileMenuOpen = false"
+                       wire:navigate
+                       class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition {{ request()->routeIs('seller.orders.*') ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white font-semibold' : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-white' }}">
+                        <svg class="size-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/>
+                        </svg>
+                        <span>Orders</span>
+                        <x-seller-placed-orders-badge />
+                    </a>
+
                     <a href="{{ route('seller.products.index') }}"
                        wire:navigate
                        class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition {{ request()->routeIs('seller.products.index') || request()->routeIs('seller.products.edit') ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white font-semibold' : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-white' }}">
@@ -54,6 +65,25 @@
                             <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
                         </svg>
                         <span>Add Product</span>
+                    </a>
+
+                    <a href="{{ route('seller.fees.calculator') }}"
+                       wire:navigate
+                       class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition {{ request()->routeIs('seller.fees.calculator') ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white font-semibold' : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-white' }}">
+                        <svg class="size-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+                        </svg>
+                        <span>Fee Calculator</span>
+                    </a>
+
+                    <a href="{{ route('seller.payments.index') }}"
+                       @click="mobileMenuOpen = false"
+                       wire:navigate
+                       class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition {{ request()->routeIs('seller.payments.*') ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white font-semibold' : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-white' }}">
+                        <svg class="size-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>
+                        </svg>
+                        <span>Payments & Settlements</span>
                     </a>
 
                     <a href="{{ route('seller.profile') }}"
@@ -146,6 +176,17 @@
                         <span>Overview</span>
                     </a>
 
+                    <a href="{{ route('seller.orders.index') }}"
+                       @click="mobileMenuOpen = false"
+                       wire:navigate
+                       class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition {{ request()->routeIs('seller.orders.*') ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white font-semibold' : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-white' }}">
+                        <svg class="size-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/>
+                        </svg>
+                        <span>Orders</span>
+                        <x-seller-placed-orders-badge />
+                    </a>
+
                     <a href="{{ route('seller.products.index') }}"
                        @click="mobileMenuOpen = false"
                        wire:navigate
@@ -164,6 +205,26 @@
                             <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
                         </svg>
                         <span>Add Product</span>
+                    </a>
+
+                    <a href="{{ route('seller.fees.calculator') }}"
+                       @click="mobileMenuOpen = false"
+                       wire:navigate
+                       class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition {{ request()->routeIs('seller.fees.calculator') ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white font-semibold' : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-white' }}">
+                        <svg class="size-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+                        </svg>
+                        <span>Fee Calculator</span>
+                    </a>
+
+                    <a href="{{ route('seller.payments.index') }}"
+                       @click="mobileMenuOpen = false"
+                       wire:navigate
+                       class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition {{ request()->routeIs('seller.payments.*') ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white font-semibold' : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-white' }}">
+                        <svg class="size-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>
+                        </svg>
+                        <span>Payments & Settlements</span>
                     </a>
 
                     <a href="{{ route('seller.profile') }}"

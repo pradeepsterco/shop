@@ -16,6 +16,14 @@
                         {{ __('Dashboard') }}
                     </flux:sidebar.item>
 
+                    <flux:sidebar.item icon="shopping-bag" :href="route('orders.index')" :current="request()->routeIs('orders.*')" wire:navigate>
+                        {{ __('My Orders') }}
+                    </flux:sidebar.item>
+
+                    <flux:sidebar.item icon="map-pin" :href="route('addresses.index')" :current="request()->routeIs('addresses.*')" wire:navigate>
+                        {{ __('Addresses') }}
+                    </flux:sidebar.item>
+
                     @if (auth()->user()->isSeller())
                         <flux:sidebar.item icon="building-storefront" :href="route('seller.dashboard')" wire:navigate>
                             {{ __('Seller Dashboard') }}

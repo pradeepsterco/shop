@@ -208,6 +208,40 @@ new #[Layout('layouts.seller')] #[Title('Edit Product')] class extends Component
 
         $this->product->refresh();
     }
+
+    public function getFeePreview(float|int|string $price, ?int $verticalId = null, ?float $weightKg = null): ?\App\Fees\DTOs\FeeBreakdownDto
+    {
+        $priceFloat = (float) $price;
+        if ($priceFloat <= 0) {
+            return null;
+        }
+
+        $calculator = app(\App\Fees\Contracts\FeeCalculatorInterface::class);
+        $profile = auth()->user()?->sellerProfile;
+
+        $weightGrams = $weightKg !== null ? (int) round($weightKg * 1000) : null;
+
+        $input = new \App\Fees\DTOs\FeeQuoteInput(
+            pricePaise: (int) round($priceFloat * 100),
+            productGstRate: 12.0,
+            verticalId: $verticalId,
+            weightGrams: $weightGrams,
+            sellerPickupState: $profile?->pickup_state,
+            sellerPickupPincode: $profile?->pickup_postal_code,
+            deliveryState: null,
+            deliveryPincode: null,
+            paymentMethod: 'cod',
+            sellerHasPan: ! empty($profile?->pan),
+            effectiveDate: now(),
+            qty: 1,
+        );
+
+        try {
+            return $calculator->quote($input);
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
 }; ?>
 
 <div class="space-y-6">
@@ -319,9 +353,30 @@ new #[Layout('layouts.seller')] #[Title('Edit Product')] class extends Component
                                     @error("sellerListings.{$vId}.mrp") <p class="text-[10px] text-red-600 dark:text-red-400 mt-0.5">{{ $message }}</p> @enderror
                                 </td>
                                 <td class="px-3 py-2">
-                                    <input wire:model="sellerListings.{{ $vId }}.selling_price" type="number" step="0.01" min="1"
+                                    <input wire:model.live.debounce.300ms="sellerListings.{{ $vId }}.selling_price" type="number" step="0.01" min="1"
                                            class="w-24 rounded-md border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-800 dark:text-white" />
                                     @error("sellerListings.{$vId}.selling_price") <p class="text-[10px] text-red-600 dark:text-red-400 mt-0.5">{{ $message }}</p> @enderror
+
+                                    @php
+                                        $vPrice = $sellerListings[$vId]['selling_price'] ?? 0;
+                                        $vWeight = $variant->weight ?? null;
+                                        $vPreview = $this->getFeePreview($vPrice, $this->product->vertical_id, $vWeight);
+                                    @endphp
+                                    @if ($vPreview)
+                                        <div x-data="{ open: false }" class="mt-1">
+                                            <div class="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                                                <span>≈ {{ $vPreview->netPayout->format() }}</span>
+                                                <button type="button" @click="open = !open" class="text-zinc-400 hover:text-zinc-600 font-normal underline">(?)</button>
+                                            </div>
+                                            <div x-show="open" x-cloak class="absolute z-20 mt-1 w-48 rounded-lg border border-zinc-200 bg-white p-2 text-[10px] shadow-lg space-y-1 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                                                <div class="flex justify-between"><span>Commission:</span><span class="text-red-600">-{{ $vPreview->commission->format() }}</span></div>
+                                                <div class="flex justify-between"><span>Closing Fee:</span><span class="text-red-600">-{{ $vPreview->closingFee->format() }}</span></div>
+                                                <div class="flex justify-between"><span>Shipping:</span><span class="text-red-600">-{{ $vPreview->shippingFee->format() }}</span></div>
+                                                <div class="flex justify-between"><span>Taxes:</span><span class="text-red-600">-{{ $vPreview->gstOnFees->add($vPreview->tcs, $vPreview->tds)->format() }}</span></div>
+                                                <div class="border-t pt-0.5 text-[9px] text-zinc-400 italic">Final amount depends on delivery location.</div>
+                                            </div>
+                                        </div>
+                                    @endif
                                 </td>
                                 <td class="px-3 py-2">
                                     <input wire:model="sellerListings.{{ $vId }}.stock" type="number" min="0"

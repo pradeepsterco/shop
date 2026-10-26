@@ -9,17 +9,16 @@ use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\EnsureUserIsApprovedSeller;
 use App\Http\Middleware\EnsureUserPasswordChanged;
 use App\Models\Admin;
-use App\Models\User;
+use App\Services\CartService;
 use Carbon\CarbonImmutable;
 use Illuminate\Session\Middleware\AuthenticateSession;
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 use Livewire\Livewire;
-use Illuminate\Auth\Events\Login;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -28,7 +27,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->app->scoped(\App\Services\CartService::class);
+        require_once __DIR__.'/../Support/helpers.php';
+
+        $this->app->scoped(CartService::class);
     }
 
     /**
@@ -37,6 +38,14 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureDefaults();
+
+        Blade::directive('datetime', function (string $expression): string {
+            return "<?php echo \App\Support\DateFormatter::format({$expression}); ?>";
+        });
+
+        Blade::directive('date', function (string $expression): string {
+            return "<?php echo \App\Support\DateFormatter::formatDate({$expression}); ?>";
+        });
 
         Gate::before(function ($user, string $ability): ?bool {
             if ($user instanceof Admin && $user->isSuperAdmin()) {
@@ -55,14 +64,6 @@ class AppServiceProvider extends ServiceProvider
             EnsureUserPasswordChanged::class,
             EnsureUserIsApprovedSeller::class,
         ]);
-
-        // Merge the guest cart into the customer's cart on login.
-        // The instanceof check skips admin logins (separate Admin model/guard).
-        Event::listen(Login::class, function (Login $event): void {
-            if ($event->user instanceof User) {
-                app(\App\Services\CartService::class)->mergeGuestIntoUser($event->user);
-            }
-        });
     }
 
     /**

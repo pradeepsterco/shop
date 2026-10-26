@@ -1,0 +1,508 @@
+<?php
+
+namespace App\Orders\Services;
+
+use App\Enums\ListingStatus;
+use App\Enums\ProductImageStatus;
+use App\Enums\ProductQcStatus;
+use App\Enums\SellerStatus;
+use App\Enums\VariantQcStatus;
+use App\Mail\CustomerOrderConfirmationMail;
+use App\Mail\SellerNewOrderMail;
+use App\Models\CustomerAddress;
+use App\Models\Listing;
+use App\Models\User;
+use App\Orders\DTOs\PlaceOrderData;
+use App\Orders\Enums\OrderStatus;
+use App\Orders\Enums\PaymentMethod;
+use App\Orders\Enums\PaymentStatus;
+use App\Orders\Enums\SellerOrderStatus;
+use App\Orders\Events\OrderPlaced;
+use App\Orders\Events\SellerOrderCancelled;
+use App\Orders\Events\SellerOrderDelivered;
+use App\Orders\Events\SellerOrderShipped;
+use App\Orders\Models\Order;
+use App\Orders\Models\OrderItem;
+use App\Orders\Models\OrderStatusHistory;
+use App\Orders\Models\SellerOrder;
+use App\Services\ProductBuyBoxService;
+use DomainException;
+use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
+
+class OrderService
+{
+    /**
+     * Place an order from PlaceOrderData in a single database transaction.
+     */
+    public function place(PlaceOrderData $data): Order
+    {
+        // 1. Idempotency check before transaction
+        /** @var Order|null $existingOrder */
+        $existingOrder = Order::with(['sellerOrders.items'])->where('checkout_intent_id', $data->idempotencyKey)->first();
+        if ($existingOrder) {
+            return $existingOrder;
+        }
+
+        // 2. Validate customer & address ownership
+        $user = User::with('sellerProfile')->findOrFail($data->userId);
+        $address = CustomerAddress::where('id', $data->addressId)->where('user_id', $user->id)->first();
+        if (! $address) {
+            throw new DomainException('The selected delivery address does not belong to your account.');
+        }
+
+        if (empty($data->lines)) {
+            throw new DomainException('Cannot place an order with no items.');
+        }
+
+        // 3. Pre-load listings and validate availability & prices
+        $lineQtys = [];
+        foreach ($data->lines as $line) {
+            $lid = (int) $line['listing_id'];
+            $lineQtys[$lid] = (int) $line['qty'];
+        }
+
+        $listings = Listing::with(['variant.product.vertical', 'variant.product.images', 'sellerProfile'])
+            ->whereIn('id', array_keys($lineQtys))
+            ->get()
+            ->keyBy('id');
+
+        $liveTotal = 0;
+        $itemsMrpTotal = 0;
+        $sellerGroups = [];
+
+        foreach ($lineQtys as $listingId => $qty) {
+            /** @var Listing|null $listing */
+            $listing = $listings->get($listingId);
+            if (! $listing) {
+                throw new DomainException('One or more selected items are no longer available.');
+            }
+
+            // Check own listing
+            if ($user->sellerProfile && $listing->seller_profile_id === $user->sellerProfile->id) {
+                throw new DomainException('You cannot purchase your own listings.');
+            }
+
+            // Availability validation
+            $this->validateListingAvailability($listing);
+
+            if ($listing->stock < $qty) {
+                $title = $listing->variant->product->title ?? 'Item';
+                throw new DomainException("Item '{$title}' is out of stock or does not have enough quantity.");
+            }
+
+            $unitPrice = (int) $listing->selling_price;
+            $mrp = (int) max($listing->mrp, $unitPrice);
+            $lineTotal = $unitPrice * $qty;
+            $lineMrpTotal = $mrp * $qty;
+
+            $liveTotal += $lineTotal;
+            $itemsMrpTotal += $lineMrpTotal;
+
+            $sellerId = $listing->seller_profile_id;
+            if (! isset($sellerGroups[$sellerId])) {
+                $sellerGroups[$sellerId] = [
+                    'sellerProfile' => $listing->sellerProfile,
+                    'items' => [],
+                    'subtotal' => 0,
+                    'mrp_total' => 0,
+                ];
+            }
+
+            $sellerGroups[$sellerId]['items'][] = [
+                'listing' => $listing,
+                'qty' => $qty,
+                'unit_price' => $unitPrice,
+                'mrp' => $mrp,
+                'line_total' => $lineTotal,
+            ];
+            $sellerGroups[$sellerId]['subtotal'] += $lineTotal;
+            $sellerGroups[$sellerId]['mrp_total'] += $lineMrpTotal;
+        }
+
+        // 4. Verify live total matches expected total
+        if ($liveTotal !== $data->expectedTotal) {
+            $formattedLive = number_format($liveTotal / 100);
+            throw new DomainException("Price has changed since your checkout session started. Live total is ₹{$formattedLive}. Please review and confirm your order.");
+        }
+
+        $discountTotal = max(0, $itemsMrpTotal - $liveTotal);
+        $deliveryFee = 0;
+        $grandTotal = $liveTotal + $deliveryFee;
+
+        // 5. Execute transaction: claim order first, lock listings, decrement stock
+        $order = DB::transaction(function () use (
+            $data,
+            $user,
+            $address,
+            $itemsMrpTotal,
+            $discountTotal,
+            $deliveryFee,
+            $grandTotal,
+            $sellerGroups,
+            $lineQtys
+        ) {
+            // Claim checkout intent idempotently by inserting the order first
+            try {
+                $orderNumber = $this->generateUniqueOrderNumber();
+                $order = Order::create([
+                    'order_number' => $orderNumber,
+                    'user_id' => $user->id,
+                    'checkout_intent_id' => $data->idempotencyKey,
+                    'status' => OrderStatus::Placed,
+                    'delivery_address' => $address->toSnapshot(),
+                    'delivery_state' => $address->state,
+                    'payment_method' => PaymentMethod::CashOnDelivery,
+                    'payment_status' => PaymentStatus::Pending,
+                    'items_mrp_total' => $itemsMrpTotal,
+                    'discount_total' => $discountTotal,
+                    'delivery_fee' => $deliveryFee,
+                    'grand_total' => $grandTotal,
+                    'placed_at' => now(),
+                ]);
+            } catch (UniqueConstraintViolationException) {
+                // Double click / concurrent submit -> return existing order
+                return Order::with(['sellerOrders.items'])->where('checkout_intent_id', $data->idempotencyKey)->firstOrFail();
+            }
+
+            // Lock listing rows ordered by id ascending to prevent deadlocks
+            $sortedListingIds = array_keys($lineQtys);
+            sort($sortedListingIds);
+
+            Listing::whereIn('id', $sortedListingIds)
+                ->orderBy('id', 'asc')
+                ->lockForUpdate()
+                ->get();
+
+            // Atomic guarded stock decrement
+            foreach ($lineQtys as $listingId => $qty) {
+                $affected = Listing::where('id', $listingId)
+                    ->where('stock', '>=', $qty)
+                    ->decrement('stock', $qty);
+
+                if ($affected === 0) {
+                    throw new DomainException('Stock changed during checkout. One or more items are no longer available in the requested quantity.');
+                }
+            }
+
+            // Create Seller Orders and Order Items
+            foreach ($sellerGroups as $group) {
+                $seller = $group['sellerProfile'];
+                $sellerSubtotal = $group['subtotal'];
+                $sellerMrpTotal = $group['mrp_total'];
+                $sellerDiscount = max(0, $sellerMrpTotal - $sellerSubtotal);
+
+                $sellerOrder = SellerOrder::create([
+                    'order_id' => $order->id,
+                    'seller_profile_id' => $seller->id,
+                    'seller_store_name' => $seller->store_name,
+                    'seller_gstin' => $seller->gstin,
+                    'seller_pickup_state' => $seller->pickup_state,
+                    'status' => SellerOrderStatus::Placed,
+                    'subtotal' => $sellerSubtotal,
+                    'discount_total' => $sellerDiscount,
+                    'grand_total' => $sellerSubtotal,
+                    'placed_at' => now(),
+                ]);
+
+                // Create Order Items
+                foreach ($group['items'] as $itemData) {
+                    /** @var Listing $listing */
+                    $listing = $itemData['listing'];
+                    $qty = $itemData['qty'];
+                    $unitPrice = $itemData['unit_price'];
+                    $mrp = $itemData['mrp'];
+                    $lineTotal = $itemData['line_total'];
+
+                    $variant = $listing->variant;
+                    $product = $variant->product;
+                    $vertical = $product->vertical;
+
+                    $hsnCode = $vertical?->hsn_code;
+                    $gstRate = (float) ($vertical ? $vertical->gst_rate : 0);
+                    $gstAmount = (int) round($lineTotal - ($lineTotal / (1 + ($gstRate / 100))));
+
+                    $primaryImg = $product->images->first(fn ($img) => $img->status === ProductImageStatus::Live && $img->is_primary)
+                        ?? $product->images->first(fn ($img) => $img->status === ProductImageStatus::Live)
+                        ?? $product->images->first();
+
+                    $labels = [];
+                    if (! empty($variant->variant_attributes)) {
+                        foreach ($variant->variant_attributes as $code => $val) {
+                            $labels[] = $variant->optionDisplayLabel($code) ?: (string) $val;
+                        }
+                    }
+                    $variantTitle = implode(', ', array_filter($labels));
+
+                    OrderItem::create([
+                        'seller_order_id' => $sellerOrder->id,
+                        'listing_id' => $listing->id,
+                        'product_variant_id' => $variant->id,
+                        'title' => $product->title,
+                        'variant_title' => $variantTitle ?: null,
+                        'sku' => $listing->sku,
+                        'upid' => $variant->upid,
+                        'image_path' => $primaryImg ? $primaryImg->url() : null,
+                        'seller_name' => $seller->store_name,
+                        'unit_price' => $unitPrice,
+                        'mrp' => $mrp,
+                        'qty' => $qty,
+                        'line_total' => $lineTotal,
+                        'hsn_code' => $hsnCode,
+                        'gst_rate' => $gstRate,
+                        'gst_amount' => $gstAmount,
+                    ]);
+                }
+
+                // Initial status history log
+                OrderStatusHistory::create([
+                    'seller_order_id' => $sellerOrder->id,
+                    'from_status' => null,
+                    'to_status' => SellerOrderStatus::Placed->value,
+                    'changed_by_type' => 'customer',
+                    'changed_by_id' => $user->id,
+                    'reason' => 'Order placed with Cash on Delivery',
+                    'created_at' => now(),
+                ]);
+            }
+
+            return $order;
+        });
+
+        // 6. After Commit side effects: refresh buy boxes and fire event
+        $affectedProductIds = [];
+        foreach ($listings as $listing) {
+            if ($listing->variant->product_id) {
+                $affectedProductIds[] = $listing->variant->product_id;
+            }
+        }
+        $affectedProductIds = array_unique($affectedProductIds);
+
+        $buyBoxService = app(ProductBuyBoxService::class);
+        foreach ($affectedProductIds as $pId) {
+            $buyBoxService->refresh($pId);
+        }
+
+        // Fire OrderPlaced event (cart cleans up lines when source == 'cart')
+        event(new OrderPlaced($order->id, $user->id, $data->lines, $data->source));
+
+        // Queue order confirmation notifications after commit
+        Mail::to($user->email)->queue(new CustomerOrderConfirmationMail($order));
+
+        foreach ($order->sellerOrders as $sellerOrder) {
+            $sellerUser = $sellerOrder->sellerProfile?->user;
+            if ($sellerUser && $sellerUser->email) {
+                Mail::to($sellerUser->email)->queue(new SellerNewOrderMail($sellerOrder));
+            }
+        }
+
+        return $order;
+    }
+
+    /**
+     * Transition a seller order's status and record audit log.
+     */
+    public function transitionSellerOrderStatus(
+        SellerOrder $sellerOrder,
+        SellerOrderStatus $newStatus,
+        string $actorType,
+        int $actorId,
+        ?string $reason = null,
+        ?string $courierName = null,
+        ?string $trackingNumber = null,
+    ): void {
+        $oldStatus = $sellerOrder->status;
+        if ($oldStatus === $newStatus) {
+            return;
+        }
+
+        DB::transaction(function () use ($sellerOrder, $oldStatus, $newStatus, $actorType, $actorId, $reason, $courierName, $trackingNumber) {
+            $updates = ['status' => $newStatus];
+
+            match ($newStatus) {
+                SellerOrderStatus::Confirmed => $updates['confirmed_at'] = now(),
+                SellerOrderStatus::Packed => $updates['packed_at'] = now(),
+                SellerOrderStatus::Shipped => [
+                    $updates['shipped_at'] = now(),
+                    $updates['courier_name'] = $courierName,
+                    $updates['tracking_number'] = $trackingNumber,
+                ],
+                SellerOrderStatus::Delivered => $updates['delivered_at'] = now(),
+                SellerOrderStatus::Cancelled => [
+                    $updates['cancelled_at'] = now(),
+                    $updates['cancellation_reason'] = $reason,
+                    $updates['cancelled_by_type'] = $actorType,
+                    $updates['cancelled_by_id'] = $actorId,
+                ],
+                default => null,
+            };
+
+            $sellerOrder->update($updates);
+
+            OrderStatusHistory::create([
+                'seller_order_id' => $sellerOrder->id,
+                'from_status' => $oldStatus->value,
+                'to_status' => $newStatus->value,
+                'changed_by_type' => $actorType,
+                'changed_by_id' => $actorId,
+                'reason' => $reason,
+                'created_at' => now(),
+            ]);
+
+            // Update parent order status
+            $this->updateParentOrderStatus($sellerOrder->order);
+
+            // Fire domain events after DB commit
+            DB::afterCommit(function () use ($sellerOrder, $newStatus, $actorType, $actorId, $reason) {
+                $profileId = (int) $sellerOrder->seller_profile_id;
+                $timestamp = now();
+
+                match ($newStatus) {
+                    SellerOrderStatus::Shipped => event(new SellerOrderShipped(
+                        sellerOrderId: (string) $sellerOrder->id,
+                        sellerProfileId: $profileId,
+                        timestamp: $timestamp,
+                        actorType: $actorType,
+                        actorId: $actorId,
+                    )),
+                    SellerOrderStatus::Delivered => event(new SellerOrderDelivered(
+                        sellerOrderId: (string) $sellerOrder->id,
+                        sellerProfileId: $profileId,
+                        timestamp: $timestamp,
+                        actorType: $actorType,
+                        actorId: $actorId,
+                    )),
+                    SellerOrderStatus::Cancelled => event(new SellerOrderCancelled(
+                        sellerOrderId: (string) $sellerOrder->id,
+                        sellerProfileId: $profileId,
+                        timestamp: $timestamp,
+                        actorType: $actorType,
+                        actorId: $actorId,
+                        reason: $reason,
+                    )),
+                    default => null,
+                };
+            });
+        });
+    }
+
+    /**
+     * Cancel a seller order, restock its listings, and update parent order.
+     */
+    public function cancelSellerOrder(SellerOrder $sellerOrder, string $actorType, int $actorId, string $reason): void
+    {
+        if ($sellerOrder->status === SellerOrderStatus::Cancelled) {
+            return;
+        }
+
+        if ($actorType === 'customer' && ! $sellerOrder->status->canCancelByCustomer()) {
+            throw new DomainException('This order cannot be cancelled as it has already been processed.');
+        }
+
+        if ($actorType === 'seller' && ! $sellerOrder->status->canCancelBySeller()) {
+            throw new DomainException('This order cannot be cancelled at this stage.');
+        }
+
+        DB::transaction(function () use ($sellerOrder, $actorType, $actorId, $reason) {
+            // Restock listings
+            $affectedProductIds = [];
+            foreach ($sellerOrder->items as $item) {
+                if ($item->listing_id) {
+                    Listing::where('id', $item->listing_id)->increment('stock', $item->qty);
+                }
+                if ($item->variant && $item->variant->product_id) {
+                    $affectedProductIds[] = $item->variant->product_id;
+                }
+            }
+
+            $this->transitionSellerOrderStatus(
+                $sellerOrder,
+                SellerOrderStatus::Cancelled,
+                $actorType,
+                $actorId,
+                $reason
+            );
+
+            // Refresh buy boxes for restocked products
+            $buyBoxService = app(ProductBuyBoxService::class);
+            foreach (array_unique($affectedProductIds) as $pId) {
+                $buyBoxService->refresh($pId);
+            }
+        });
+    }
+
+    /**
+     * Update parent Order status based on all child seller orders.
+     */
+    public function updateParentOrderStatus(Order $order): void
+    {
+        $sellerOrders = $order->sellerOrders()->get();
+        if ($sellerOrders->isEmpty()) {
+            return;
+        }
+
+        $allCancelled = $sellerOrders->every(fn (SellerOrder $so) => $so->status === SellerOrderStatus::Cancelled);
+        $anyCancelled = $sellerOrders->contains(fn (SellerOrder $so) => $so->status === SellerOrderStatus::Cancelled);
+        $allDelivered = $sellerOrders->every(fn (SellerOrder $so) => $so->status === SellerOrderStatus::Delivered);
+
+        if ($allCancelled) {
+            $order->status = OrderStatus::Cancelled;
+            match ($order->payment_method) {
+                PaymentMethod::CashOnDelivery => $order->payment_status = PaymentStatus::Cancelled,
+            };
+        } elseif ($allDelivered) {
+            $order->status = OrderStatus::Completed;
+            match ($order->payment_method) {
+                PaymentMethod::CashOnDelivery => $order->payment_status = PaymentStatus::Completed,
+            };
+        } elseif ($anyCancelled) {
+            $order->status = OrderStatus::PartiallyCancelled;
+        } else {
+            $order->status = OrderStatus::Placed;
+        }
+
+        $order->save();
+    }
+
+    /**
+     * Generate unique order number with retries on collision.
+     */
+    private function generateUniqueOrderNumber(): string
+    {
+        for ($i = 0; $i < 5; $i++) {
+            $number = 'KH-'.date('Ymd').'-'.strtoupper(Str::random(6));
+            if (! Order::where('order_number', $number)->exists()) {
+                return $number;
+            }
+        }
+
+        return 'KH-'.date('Ymd').'-'.strtoupper(Str::random(10));
+    }
+
+    /**
+     * Check listing full availability.
+     */
+    private function validateListingAvailability(Listing $listing): void
+    {
+        if ($listing->trashed() || $listing->status !== ListingStatus::Active) {
+            throw new DomainException('An item in your order is no longer available.');
+        }
+
+        $variant = $listing->variant;
+        if ($variant->trashed() || $variant->qc_status !== VariantQcStatus::Approved) {
+            throw new DomainException('An item variant in your order is no longer available.');
+        }
+
+        $product = $variant->product;
+        if ($product->qc_status !== ProductQcStatus::Approved) {
+            throw new DomainException('A product in your order is no longer available.');
+        }
+
+        $seller = $listing->sellerProfile;
+        if ($seller->status !== SellerStatus::Approved) {
+            throw new DomainException('A seller in your order is currently inactive or suspended.');
+        }
+    }
+}

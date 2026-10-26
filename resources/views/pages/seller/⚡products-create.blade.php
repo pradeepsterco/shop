@@ -636,6 +636,40 @@ new #[Layout('layouts.seller')] #[Title('Add Product')] class extends Component 
             ->orderBy('name')
             ->get();
     }
+
+    public function getFeePreview(float|int|string $price, ?int $verticalId = null, ?float $weightKg = null): ?\App\Fees\DTOs\FeeBreakdownDto
+    {
+        $priceFloat = (float) $price;
+        if ($priceFloat <= 0) {
+            return null;
+        }
+
+        $calculator = app(\App\Fees\Contracts\FeeCalculatorInterface::class);
+        $profile = Auth::user()?->sellerProfile;
+
+        $weightGrams = $weightKg !== null ? (int) round($weightKg * 1000) : null;
+
+        $input = new \App\Fees\DTOs\FeeQuoteInput(
+            pricePaise: (int) round($priceFloat * 100),
+            productGstRate: 12.0,
+            verticalId: $verticalId,
+            weightGrams: $weightGrams,
+            sellerPickupState: $profile?->pickup_state,
+            sellerPickupPincode: $profile?->pickup_postal_code,
+            deliveryState: null,
+            deliveryPincode: null,
+            paymentMethod: 'cod',
+            sellerHasPan: ! empty($profile?->pan),
+            effectiveDate: now(),
+            qty: 1,
+        );
+
+        try {
+            return $calculator->quote($input);
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
 }; ?>
 
 <div class="space-y-6">
@@ -1108,9 +1142,30 @@ new #[Layout('layouts.seller')] #[Title('Add Product')] class extends Component 
                                                     @error("variantRows.{$idx}.mrp") <p class="text-[10px] text-red-600 dark:text-red-400 mt-0.5">{{ $message }}</p> @enderror
                                                 </td>
                                                 <td class="px-3 py-2">
-                                                    <input wire:model="variantRows.{{ $idx }}.selling_price" type="number" step="0.01" min="1" placeholder="₹"
+                                                    <input wire:model.live.debounce.300ms="variantRows.{{ $idx }}.selling_price" type="number" step="0.01" min="1" placeholder="₹"
                                                            class="w-24 rounded-md border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-800 dark:text-white" />
                                                     @error("variantRows.{$idx}.selling_price") <p class="text-[10px] text-red-600 dark:text-red-400 mt-0.5">{{ $message }}</p> @enderror
+
+                                                    @php
+                                                        $rowPrice = $variantRows[$idx]['selling_price'] ?? 0;
+                                                        $rowWeight = ! empty($variantRows[$idx]['weight']) ? (float) $variantRows[$idx]['weight'] : null;
+                                                        $rowPreview = $this->getFeePreview($rowPrice, $this->vertical_id, $rowWeight);
+                                                    @endphp
+                                                    @if ($rowPreview)
+                                                        <div x-data="{ open: false }" class="mt-1">
+                                                            <div class="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                                                                <span>≈ {{ $rowPreview->netPayout->format() }}</span>
+                                                                <button type="button" @click="open = !open" class="text-zinc-400 hover:text-zinc-600 font-normal underline">(?)</button>
+                                                            </div>
+                                                            <div x-show="open" x-cloak class="absolute z-20 mt-1 w-48 rounded-lg border border-zinc-200 bg-white p-2 text-[10px] shadow-lg space-y-1 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                                                                <div class="flex justify-between"><span>Commission:</span><span class="text-red-600">-{{ $rowPreview->commission->format() }}</span></div>
+                                                                <div class="flex justify-between"><span>Closing Fee:</span><span class="text-red-600">-{{ $rowPreview->closingFee->format() }}</span></div>
+                                                                <div class="flex justify-between"><span>Shipping:</span><span class="text-red-600">-{{ $rowPreview->shippingFee->format() }}</span></div>
+                                                                <div class="flex justify-between"><span>Taxes:</span><span class="text-red-600">-{{ $rowPreview->gstOnFees->add($rowPreview->tcs, $rowPreview->tds)->format() }}</span></div>
+                                                                <div class="border-t pt-0.5 text-[9px] text-zinc-400 italic">Final amount depends on delivery location.</div>
+                                                            </div>
+                                                        </div>
+                                                    @endif
                                                 </td>
                                                 <td class="px-3 py-2">
                                                     <input wire:model="variantRows.{{ $idx }}.stock" type="number" min="0" placeholder="Qty"
@@ -1290,9 +1345,30 @@ new #[Layout('layouts.seller')] #[Title('Add Product')] class extends Component 
 
                         <div>
                             <label for="q-price" class="block text-xs font-medium text-zinc-700 dark:text-zinc-300">Selling Price (₹) *</label>
-                            <input wire:model="quick_price" type="number" step="0.01" min="1" id="q-price" required placeholder="799.00"
+                            <input wire:model.live.debounce.300ms="quick_price" type="number" step="0.01" min="1" id="q-price" required placeholder="799.00"
                                    class="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-800 dark:text-white" />
                             @error('quick_price') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+
+                            @php
+                                $quickPreview = $this->getFeePreview($this->quick_price, $this->vertical_id);
+                            @endphp
+                            @if ($quickPreview)
+                                <div x-data="{ open: false }" class="mt-2 text-xs">
+                                    <div class="flex items-center justify-between text-[11px] text-emerald-600 dark:text-emerald-400 font-bold">
+                                        <span>You'll receive ≈ {{ $quickPreview->netPayout->format() }}</span>
+                                        <button type="button" @click="open = !open" class="text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 underline text-[10px] font-normal">
+                                            <span x-text="open ? 'Hide' : 'Details'"></span>
+                                        </button>
+                                    </div>
+                                    <div x-show="open" x-cloak class="mt-1.5 rounded-lg border border-zinc-200 bg-zinc-50 p-2 text-[10px] space-y-1 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                                        <div class="flex justify-between"><span>Commission ({{ number_format($quickPreview->commissionRateBps / 100, 2) }}%):</span><span class="font-mono text-red-600">-{{ $quickPreview->commission->format() }}</span></div>
+                                        <div class="flex justify-between"><span>Closing Fee:</span><span class="font-mono text-red-600">-{{ $quickPreview->closingFee->format() }}</span></div>
+                                        <div class="flex justify-between"><span>Shipping (National):</span><span class="font-mono text-red-600">-{{ $quickPreview->shippingFee->format() }}</span></div>
+                                        <div class="flex justify-between"><span>Taxes on Fees & TDS:</span><span class="font-mono text-red-600">-{{ $quickPreview->gstOnFees->add($quickPreview->tcs, $quickPreview->tds)->format() }}</span></div>
+                                        <div class="pt-1 border-t border-zinc-200 dark:border-zinc-700 text-zinc-400 italic">Final amount depends on delivery location.</div>
+                                    </div>
+                                </div>
+                            @endif
                         </div>
                     </div>
 

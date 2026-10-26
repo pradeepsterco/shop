@@ -89,7 +89,7 @@ new #[Layout('layouts.admin')] #[Title('Activity Logs')] class extends Component
                     @forelse ($this->logs as $log)
                         <tr wire:key="log-{{ $log->id }}" class="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition align-top">
                             <td class="px-4 py-3 whitespace-nowrap text-zinc-500 text-[11px]">
-                                <div>{{ $log->created_at->format('Y-m-d H:i:s') }}</div>
+                                <div>@datetime($log->created_at)</div>
                                 <div class="text-[10px] text-zinc-400 font-mono">{{ $log->ip_address }}</div>
                             </td>
                             <td class="px-4 py-3">

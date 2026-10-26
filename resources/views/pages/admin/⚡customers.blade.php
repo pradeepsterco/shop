@@ -367,7 +367,7 @@ new #[Layout('layouts.admin')] #[Title('Customers')] class extends Component {
                                 @endif
                             </td>
                             <td class="px-6 py-4 text-xs text-zinc-500 dark:text-zinc-400">
-                                {{ $customer->created_at?->format('M j, Y') ?? '—' }}
+                                @date($customer->created_at, 'M j, Y')
                             </td>
                             <td class="px-6 py-4 text-right">
                                 <div class="flex items-center justify-end gap-2">

@@ -1,5 +1,6 @@
 <?php
 
+use App\Fees\Models\FeeSchedule;
 use App\Models\Admin;
 use App\Models\Brand;
 use App\Models\Category;
@@ -8,7 +9,11 @@ use App\Models\SellerProfile;
 use App\Models\User;
 use App\Models\Vertical;
 use App\Models\VerticalAttribute;
+use App\Shared\Enums\FeeScheduleStatus;
+use App\Shipping\Enums\ShipmentStatus;
+use App\Shipping\Models\Shipment;
 use App\Support\AdminPermissions;
+use Illuminate\Support\Str;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
 
@@ -327,5 +332,148 @@ test('view-only staff cannot invoke staff mutation actions', function () {
         ->test('pages::admin.staff')
         ->set('resetAdminId', $target->id)
         ->call('confirmResetPassword')
+        ->assertForbidden();
+});
+
+test('view-only staff cannot invoke fee schedule mutation actions', function () {
+    $staff = Admin::factory()->create();
+    $role = Role::findOrCreate('Fee Viewer', 'admin');
+    $role->syncPermissions([AdminPermissions::FEES_VIEW]);
+    $staff->assignRole($role);
+
+    $schedule = FeeSchedule::create([
+        'name' => 'Active Test Sched',
+        'version' => 1,
+        'status' => FeeScheduleStatus::Active,
+        'effective_from' => now()->subDay(),
+        'gst_rate' => 18.00,
+        'tcs_rate' => 0.50,
+        'tds_standard_rate' => 0.10,
+        'tds_no_pan_rate' => 5.00,
+        'default_weight_grams' => 500,
+    ]);
+
+    $draft = FeeSchedule::create([
+        'name' => 'Draft Sched',
+        'version' => 2,
+        'status' => FeeScheduleStatus::Draft,
+        'gst_rate' => 18.00,
+        'tcs_rate' => 0.50,
+        'tds_standard_rate' => 0.10,
+        'tds_no_pan_rate' => 5.00,
+        'default_weight_grams' => 500,
+    ]);
+
+    // pages::admin.fees-index actions require fees.manage
+    Livewire::actingAs($staff, 'admin')
+        ->test('pages::admin.fees-index')
+        ->call('cloneSchedule', $schedule->id)
+        ->assertForbidden();
+
+    Livewire::actingAs($staff, 'admin')
+        ->test('pages::admin.fees-index')
+        ->call('confirmActivate', $draft->id)
+        ->assertForbidden();
+
+    Livewire::actingAs($staff, 'admin')
+        ->test('pages::admin.fees-index')
+        ->call('activate')
+        ->assertForbidden();
+
+    // pages::admin.fees-show actions require fees.manage
+    Livewire::actingAs($staff, 'admin')
+        ->test('pages::admin.fees-show', ['feeSchedule' => $schedule])
+        ->call('cloneSchedule')
+        ->assertForbidden();
+
+    Livewire::actingAs($staff, 'admin')
+        ->test('pages::admin.fees-show', ['feeSchedule' => $schedule])
+        ->call('activateSchedule')
+        ->assertForbidden();
+
+    // pages::admin.fees-edit requires fees.manage to mount or save
+    Livewire::actingAs($staff, 'admin')
+        ->test('pages::admin.fees-edit', ['feeSchedule' => $draft])
+        ->assertForbidden();
+});
+
+test('view-only staff cannot invoke settlements and payout management actions', function () {
+    $staff = Admin::factory()->create();
+    $role = Role::findOrCreate('Finance Viewer', 'admin');
+    $role->syncPermissions([AdminPermissions::SETTLEMENTS_VIEW, AdminPermissions::PAYOUTS_VIEW]);
+    $staff->assignRole($role);
+
+    // pages::admin.settlements-index -> releaseMatured requires payouts.manage
+    Livewire::actingAs($staff, 'admin')
+        ->test('pages::admin.settlements-index')
+        ->call('releaseMatured')
+        ->assertForbidden();
+
+    // pages::admin.payouts-index -> openCreateModal, createBatch, confirmMarkPaid, confirmMarkFailed, cancelBatch require payouts.manage
+    Livewire::actingAs($staff, 'admin')
+        ->test('pages::admin.payouts-index')
+        ->call('openCreateModal')
+        ->assertForbidden();
+
+    Livewire::actingAs($staff, 'admin')
+        ->test('pages::admin.payouts-index')
+        ->call('createBatch')
+        ->assertForbidden();
+
+    Livewire::actingAs($staff, 'admin')
+        ->test('pages::admin.payouts-index')
+        ->call('confirmMarkPaid')
+        ->assertForbidden();
+
+    Livewire::actingAs($staff, 'admin')
+        ->test('pages::admin.payouts-index')
+        ->call('confirmMarkFailed')
+        ->assertForbidden();
+
+    Livewire::actingAs($staff, 'admin')
+        ->test('pages::admin.payouts-index')
+        ->call('cancelBatch', 'test-batch-id')
+        ->assertForbidden();
+});
+
+test('view-only staff cannot invoke shipping management actions', function () {
+    $staff = Admin::factory()->create();
+    $role = Role::findOrCreate('Shipping Viewer', 'admin');
+    $role->syncPermissions([AdminPermissions::SHIPPING_VIEW]);
+    $staff->assignRole($role);
+
+    $shipment = Shipment::create([
+        'seller_order_id' => (string) Str::ulid(),
+        'order_id' => (string) Str::ulid(),
+        'seller_profile_id' => 1,
+        'provider' => 'fake',
+        'awb' => 'FAKE-999',
+        'status' => ShipmentStatus::Created,
+        'actual_weight_grams' => 500,
+        'volumetric_weight_grams' => 500,
+        'chargeable_weight_grams' => 500,
+        'length_cm' => 15,
+        'width_cm' => 10,
+        'height_cm' => 5,
+    ]);
+
+    Livewire::actingAs($staff, 'admin')
+        ->test('pages::admin.shipping-settings')
+        ->call('testConnection')
+        ->assertForbidden();
+
+    Livewire::actingAs($staff, 'admin')
+        ->test('pages::admin.shipping-settings')
+        ->call('syncWarehouses')
+        ->assertForbidden();
+
+    Livewire::actingAs($staff, 'admin')
+        ->test('pages::admin.shipments-show', ['shipment' => $shipment->id])
+        ->call('pollTracking')
+        ->assertForbidden();
+
+    Livewire::actingAs($staff, 'admin')
+        ->test('pages::admin.shipments-show', ['shipment' => $shipment->id])
+        ->call('cancelShipment')
         ->assertForbidden();
 });

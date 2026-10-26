@@ -22,8 +22,6 @@ return new class extends Migration
             $table->id();
             $table->foreignId('cart_id')->constrained()->cascadeOnDelete();
 
-            // offer_id = the seller's offer for one variant. No FK on purpose:
-            // if an offer is deleted we want to keep the row and flag it "unavailable".
             $table->unsignedBigInteger('offer_id');
             $table->unsignedBigInteger('product_id');
             $table->unsignedBigInteger('variant_id')->nullable();

@@ -17,14 +17,30 @@ class CatalogSeeder extends Seeder
      */
     public function run(): void
     {
-        // 1. Seed Generic Brand (Approved by default)
-        Brand::firstOrCreate(
-            ['slug' => 'generic'],
-            [
-                'name' => 'Generic',
-                'status' => BrandStatus::Approved,
-            ]
-        );
+        // 1. Seed Approved Brands
+        $brands = [
+            ['slug' => 'generic', 'name' => 'Generic'],
+            ['slug' => 'lego', 'name' => 'LEGO'],
+            ['slug' => 'hasbro', 'name' => 'Hasbro'],
+            ['slug' => 'mattel', 'name' => 'Mattel'],
+            ['slug' => 'funko', 'name' => 'Funko'],
+            ['slug' => 'nerf', 'name' => 'Nerf'],
+            ['slug' => 'hot-wheels', 'name' => 'Hot Wheels'],
+            ['slug' => 'nike', 'name' => 'Nike'],
+            ['slug' => 'puma', 'name' => 'Puma'],
+            ['slug' => 'apple', 'name' => 'Apple'],
+            ['slug' => 'samsung', 'name' => 'Samsung'],
+        ];
+
+        foreach ($brands as $b) {
+            Brand::firstOrCreate(
+                ['slug' => $b['slug']],
+                [
+                    'name' => $b['name'],
+                    'status' => BrandStatus::Approved,
+                ]
+            );
+        }
 
         // 2. Tree 1: Fashion › Men › Topwear › T-Shirt
         $fashion = Category::firstOrCreate(
@@ -217,6 +233,158 @@ class CatalogSeeder extends Seeder
                 'is_variant' => false,
                 'is_required' => false,
                 'sort_order' => 5,
+            ]
+        );
+
+        // 4. Tree 3: Toys & Games
+        $toys = Category::firstOrCreate(
+            ['slug' => 'toys-games'],
+            ['name' => 'Toys & Games', 'sort_order' => 3, 'is_active' => true]
+        );
+
+        // 4a. Games & Puzzles › Board Game
+        $gamesPuzzles = Category::firstOrCreate(
+            ['slug' => 'games-puzzles', 'parent_id' => $toys->id],
+            ['name' => 'Games & Puzzles', 'sort_order' => 1, 'is_active' => true]
+        );
+
+        $boardGame = Vertical::firstOrCreate(
+            ['slug' => 'board-game'],
+            [
+                'category_id' => $gamesPuzzles->id,
+                'name' => 'Board Game',
+                'hsn_code' => '9504',
+                'gst_rate' => 12.00,
+                'is_active' => true,
+            ]
+        );
+
+        VerticalAttribute::firstOrCreate(
+            ['vertical_id' => $boardGame->id, 'code' => 'edition'],
+            [
+                'name' => 'Edition',
+                'type' => AttributeType::Select,
+                'is_variant' => true,
+                'is_required' => true,
+                'sort_order' => 1,
+                'options' => [
+                    ['label' => 'Standard', 'value' => 'standard', 'is_active' => true],
+                    ['label' => 'Deluxe', 'value' => 'deluxe', 'is_active' => true],
+                    ['label' => "Collector's", 'value' => 'collectors', 'is_active' => true],
+                ],
+            ]
+        );
+
+        VerticalAttribute::firstOrCreate(
+            ['vertical_id' => $boardGame->id, 'code' => 'age_group'],
+            [
+                'name' => 'Age Group',
+                'type' => AttributeType::Select,
+                'is_variant' => false,
+                'is_required' => false,
+                'sort_order' => 2,
+                'options' => [
+                    ['label' => '3+ Years', 'value' => '3-plus', 'is_active' => true],
+                    ['label' => '7+ Years', 'value' => '7-plus', 'is_active' => true],
+                    ['label' => '10+ Years', 'value' => '10-plus', 'is_active' => true],
+                    ['label' => '14+ Years', 'value' => '14-plus', 'is_active' => true],
+                ],
+            ]
+        );
+
+        // 4b. Action Figures & Collectibles › Action Figure
+        $actionCollectibles = Category::firstOrCreate(
+            ['slug' => 'action-figures-collectibles', 'parent_id' => $toys->id],
+            ['name' => 'Action Figures & Collectibles', 'sort_order' => 2, 'is_active' => true]
+        );
+
+        $actionFigure = Vertical::firstOrCreate(
+            ['slug' => 'action-figure'],
+            [
+                'category_id' => $actionCollectibles->id,
+                'name' => 'Action Figure',
+                'hsn_code' => '9503',
+                'gst_rate' => 18.00,
+                'is_active' => true,
+            ]
+        );
+
+        VerticalAttribute::firstOrCreate(
+            ['vertical_id' => $actionFigure->id, 'code' => 'character'],
+            [
+                'name' => 'Character',
+                'type' => AttributeType::Select,
+                'is_variant' => true,
+                'is_required' => true,
+                'sort_order' => 1,
+                'options' => [
+                    ['label' => 'Iron Man', 'value' => 'iron-man', 'is_active' => true],
+                    ['label' => 'Spider-Man', 'value' => 'spider-man', 'is_active' => true],
+                    ['label' => 'Batman', 'value' => 'batman', 'is_active' => true],
+                    ['label' => 'Darth Vader', 'value' => 'darth-vader', 'is_active' => true],
+                ],
+            ]
+        );
+
+        VerticalAttribute::firstOrCreate(
+            ['vertical_id' => $actionFigure->id, 'code' => 'material'],
+            [
+                'name' => 'Material',
+                'type' => AttributeType::Select,
+                'is_variant' => false,
+                'is_required' => false,
+                'sort_order' => 2,
+                'options' => [
+                    ['label' => 'Plastic', 'value' => 'plastic', 'is_active' => true],
+                    ['label' => 'Vinyl', 'value' => 'vinyl', 'is_active' => true],
+                    ['label' => 'Die-cast', 'value' => 'die-cast', 'is_active' => true],
+                ],
+            ]
+        );
+
+        // 4c. Building & Construction › Building Blocks
+        $buildingConstruction = Category::firstOrCreate(
+            ['slug' => 'building-construction', 'parent_id' => $toys->id],
+            ['name' => 'Building & Construction', 'sort_order' => 3, 'is_active' => true]
+        );
+
+        $buildingBlocks = Vertical::firstOrCreate(
+            ['slug' => 'building-blocks'],
+            [
+                'category_id' => $buildingConstruction->id,
+                'name' => 'Building Blocks',
+                'hsn_code' => '9503',
+                'gst_rate' => 18.00,
+                'is_active' => true,
+            ]
+        );
+
+        VerticalAttribute::firstOrCreate(
+            ['vertical_id' => $buildingBlocks->id, 'code' => 'theme'],
+            [
+                'name' => 'Theme',
+                'type' => AttributeType::Select,
+                'is_variant' => true,
+                'is_required' => true,
+                'sort_order' => 1,
+                'options' => [
+                    ['label' => 'City', 'value' => 'city', 'is_active' => true],
+                    ['label' => 'Space', 'value' => 'space', 'is_active' => true],
+                    ['label' => 'Castle', 'value' => 'castle', 'is_active' => true],
+                    ['label' => 'Superheroes', 'value' => 'superheroes', 'is_active' => true],
+                ],
+            ]
+        );
+
+        VerticalAttribute::firstOrCreate(
+            ['vertical_id' => $buildingBlocks->id, 'code' => 'piece_count'],
+            [
+                'name' => 'Piece Count',
+                'type' => AttributeType::Number,
+                'unit' => 'pcs',
+                'is_variant' => false,
+                'is_required' => false,
+                'sort_order' => 2,
             ]
         );
     }

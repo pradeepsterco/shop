@@ -32,7 +32,7 @@ new #[Layout('layouts.seller')] #[Title('Seller Settings')] class extends Compon
         $this->bank_account_number = $p->bank_account_number;
         $this->bank_account_number_confirmation = $p->bank_account_number;
         $this->ifsc = $p->ifsc;
-        $this->bank_updated_at = $p->bank_updated_at?->format('M j, Y H:i');
+        $this->bank_updated_at = $p->bank_updated_at ? format_datetime($p->bank_updated_at) : null;
     }
 
     public function updateBankDetails(): void
@@ -59,7 +59,7 @@ new #[Layout('layouts.seller')] #[Title('Seller Settings')] class extends Compon
         ]);
 
         $this->current_password = '';
-        $this->bank_updated_at = $profile->fresh()->bank_updated_at?->format('M j, Y H:i');
+        $this->bank_updated_at = $profile->fresh()->bank_updated_at ? format_datetime($profile->fresh()->bank_updated_at) : null;
 
         session()->flash('status', 'Bank details updated successfully. Platform administrators have been notified for re-verification.');
     }

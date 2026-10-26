@@ -84,7 +84,7 @@ new #[Layout('layouts.admin')] #[Title('Admin Dashboard')] class extends Compone
                 </div>
             </div>
             <div class="mt-4 border-t border-zinc-100 pt-3 dark:border-zinc-800/60">
-                <span class="text-xs text-zinc-500 dark:text-zinc-400">Registered since {{ now()->startOfWeek()->format('M j, Y') }}</span>
+                <span class="text-xs text-zinc-500 dark:text-zinc-400">Registered since @date(now(\App\Support\DateFormatter::displayTimezone())->startOfWeek(), 'M j, Y')</span>
             </div>
         </div>
 

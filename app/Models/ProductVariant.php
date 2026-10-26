@@ -3,9 +3,12 @@
 namespace App\Models;
 
 use App\Enums\VariantQcStatus;
+use App\Services\ProductBuyBoxService;
 use App\Services\UpidGenerator;
 use App\Services\VariantKeyNormalizer;
+use Database\Factories\ProductVariantFactory;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -31,6 +34,9 @@ use Illuminate\Support\Facades\Schema;
  */
 class ProductVariant extends Model
 {
+    /** @use HasFactory<ProductVariantFactory> */
+    use HasFactory;
+
     use SoftDeletes;
 
     protected $fillable = [
@@ -64,8 +70,32 @@ class ProductVariant extends Model
                 $variant->upid = UpidGenerator::generate();
             }
 
-            if (blank($variant->variant_key) && ! empty($variant->variant_attributes)) {
-                $variant->variant_key = VariantKeyNormalizer::normalize($variant->variant_attributes);
+            if (blank($variant->variant_attributes)) {
+                $variant->variant_attributes = [];
+            }
+
+            if (blank($variant->variant_key)) {
+                $variant->variant_key = ! empty($variant->variant_attributes)
+                    ? VariantKeyNormalizer::normalize($variant->variant_attributes)
+                    : 'default';
+            }
+        });
+
+        static::saved(function (ProductVariant $variant) {
+            if ($variant->product_id && $variant->wasChanged('qc_status')) {
+                app(ProductBuyBoxService::class)->refresh($variant->product_id);
+            }
+        });
+
+        static::deleted(function (ProductVariant $variant) {
+            if ($variant->product_id) {
+                app(ProductBuyBoxService::class)->refresh($variant->product_id);
+            }
+        });
+
+        static::restored(function (ProductVariant $variant) {
+            if ($variant->product_id) {
+                app(ProductBuyBoxService::class)->refresh($variant->product_id);
             }
         });
     }

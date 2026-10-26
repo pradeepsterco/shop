@@ -340,7 +340,7 @@ new #[Layout('layouts.admin')] #[Title('Product Catalog & QC Review')] class ext
                                             /{{ $prod->slug }}
                                         </div>
                                         <div class="mt-1 text-xs text-zinc-500">
-                                            Added {{ $prod->created_at->format('M j, Y') }}
+                                            Added @date($prod->created_at, 'M j, Y')
                                         </div>
                                     </div>
                                 </div>
@@ -507,7 +507,7 @@ new #[Layout('layouts.admin')] #[Title('Product Catalog & QC Review')] class ext
                         </div>
                         <div>
                             <span class="text-zinc-400 block">Submission Date:</span>
-                            <span class="text-zinc-700 dark:text-zinc-300">{{ $prod->created_at->format('M j, Y H:i') }}</span>
+                            <span class="text-zinc-700 dark:text-zinc-300">@datetime($prod->created_at)</span>
                         </div>
                     </div>
                     @if ($prod->qc_notes)
@@ -515,7 +515,7 @@ new #[Layout('layouts.admin')] #[Title('Product Catalog & QC Review')] class ext
                             <span class="text-zinc-400 block">QC Feedback / Reason:</span>
                             <p class="text-amber-700 dark:text-amber-300 font-medium">{{ $prod->qc_notes }}</p>
                             @if ($prod->reviewer)
-                                <span class="text-[10px] text-zinc-400">Reviewed by {{ $prod->reviewer->name }} on {{ $prod->reviewed_at?->format('M j, Y H:i') }}</span>
+                                <span class="text-[10px] text-zinc-400">Reviewed by {{ $prod->reviewer->name }} on @datetime($prod->reviewed_at)</span>
                             @endif
                         </div>
                     @endif

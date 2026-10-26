@@ -1,8 +1,47 @@
 <?php
 
+use App\Checkout\Services\CheckoutIntentService;
+use App\Models\User;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::view('/', 'welcome')->name('home');
+
+Route::livewire('products', 'pages::storefront.product-index')->name('products.index');
+Route::livewire('{slug}/p/{upid}', 'pages::storefront.product-show')->name('product.show');
+
+Route::livewire('cart', 'pages::storefront.cart')->name('cart');
+
+Route::get('checkout/resume-buy-now', function (Request $request, CheckoutIntentService $checkoutService) {
+    $listingId = $request->session()->pull('pending_buy_now_listing_id');
+    if (! $listingId) {
+        return redirect()->route('cart');
+    }
+
+    $user = $request->user();
+    if (! ($user instanceof User)) {
+        return redirect()->route('login');
+    }
+
+    try {
+        $intent = $checkoutService->createOrReuseBuyNowIntent($user, (int) $listingId);
+
+        return redirect()->route('checkout.show', ['intent' => $intent->id]);
+    } catch (DomainException $e) {
+        return redirect()->route('cart')->with('error', $e->getMessage());
+    }
+})->middleware('auth')->name('checkout.resume-buy-now');
+
+Route::livewire('checkout/{intent}', 'pages::storefront.checkout-summary')
+    ->middleware('auth')
+    ->name('checkout.show');
+
+Route::middleware('auth')->group(function () {
+    Route::livewire('orders', 'pages::storefront.order-index')->name('orders.index');
+    Route::livewire('orders/{order}/success', 'pages::storefront.order-success')->name('orders.success');
+    Route::livewire('orders/{order}', 'pages::storefront.order-show')->name('orders.show');
+    Route::livewire('addresses', 'pages::storefront.address-index')->name('addresses.index');
+});
 
 Route::livewire('welcome/{token}', 'pages::auth.welcome')->name('welcome');
 

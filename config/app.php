@@ -69,6 +69,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Application Display Timezone
+    |--------------------------------------------------------------------------
+    |
+    | The default timezone used for displaying dates and times across views,
+    | emails, reports, and date filters, while database storage remains UTC.
+    |
+    */
+
+    'display_timezone' => env('APP_DISPLAY_TIMEZONE', 'Asia/Kolkata'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Locale Configuration
     |--------------------------------------------------------------------------
     |

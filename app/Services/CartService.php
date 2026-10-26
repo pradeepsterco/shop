@@ -2,9 +2,14 @@
 
 namespace App\Services;
 
+use App\Enums\ListingStatus;
+use App\Enums\ProductImageStatus;
+use App\Enums\ProductQcStatus;
+use App\Enums\SellerStatus;
+use App\Enums\VariantQcStatus;
 use App\Models\Cart;
 use App\Models\CartItem;
-use App\Models\ProductOffer;
+use App\Models\Listing;
 use App\Models\User;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Collection;
@@ -15,27 +20,26 @@ use Illuminate\Support\Str;
 /**
  * Multi-vendor cart.
  *
- * - One line per seller offer (cart_items.offer_id, unique per cart).
+ * - One line per seller listing (cart_items.listing_id, unique per cart).
  * - Guests and users both use the database (guest = hashed cookie token).
  * - Every write runs in a transaction that first locks the cart row, so
  *   concurrent requests on the same cart are serialized (no lost updates,
  *   no duplicate lines). Deadlocks are retried.
- * - Prices live as integer paise. The cart stores a snapshot; view() re-syncs
- *   it from the live offer and flags price changes / stock problems.
- *
- * ADAPT HERE: the only place that knows your offer schema is offers(),
- * availabilityOf() and display() below. Assumed `product_offers` columns:
- * id, product_id, variant_id, seller_id, sku, mrp, price, stock, status
- * and relations product (title, thumb_image), variant (name), seller (name).
+ * - Prices live as integer paise (minor units). The cart stores a snapshot;
+ *   view() re-syncs it from the live listing and flags price changes / stock problems.
  */
 class CartService
 {
     public const MAX_QTY_PER_LINE = 10;
+
     public const MAX_LINES = 100;
+
     public const STALE_AFTER_SECONDS = 60;
 
     private const COOKIE = 'cart_token';
+
     private const COOKIE_MINUTES = 60 * 24 * 60; // 60 days
+
     private const TX_ATTEMPTS = 3;
 
     /** A guest cart created during this request: its cookie is only queued, so request()->cookie() can't see it yet. */
@@ -43,44 +47,57 @@ class CartService
 
     // ───────────────────────── Mutations ─────────────────────────
 
-    public function add(int $offerId, int $qty = 1): array
+    /**
+     * @return array<string, mixed>
+     */
+    public function add(int $listingId, int $qty = 1): array
     {
         $qty = max(1, $qty);
-        $offer = $this->offers([$offerId])->get($offerId);
-        [$status] = $this->availabilityOf($offer, 1);
+        $listing = $this->listings([$listingId])->get($listingId);
+        if (! $listing) {
+            return $this->result(false, 'This item is not available.');
+        }
+
+        // A seller cannot add their own listings to their cart
+        $user = auth()->user();
+        if ($user instanceof User && $user->sellerProfile && $listing->seller_profile_id === $user->sellerProfile->id) {
+            return $this->result(false, 'You cannot add your own listings to your cart.');
+        }
+
+        [$status] = $this->availabilityOf($listing, 1);
         if ($status !== 'ok') {
             return $this->result(false, $status === 'out_of_stock' ? 'This item is out of stock.' : 'This item is not available.');
         }
 
         $cart = $this->currentCart(true);
 
-        [$ok, $msg] = DB::transaction(function () use ($cart, $offer, $qty) {
+        [$ok, $msg] = DB::transaction(function () use ($cart, $listing, $qty) {
             $cart = Cart::whereKey($cart->id)->lockForUpdate()->first();
-            if (!$cart) {
+            if (! $cart) {
                 return [false, 'Cart not found.'];
             }
 
-            $item = $cart->items()->where('offer_id', $offer->id)->first();
-            if (!$item && $cart->items()->count() >= self::MAX_LINES) {
+            $item = $cart->items()->where('listing_id', $listing->id)->first();
+            if (! $item && $cart->items()->count() >= self::MAX_LINES) {
                 return [false, 'Your cart is full.'];
             }
 
-            $wanted = ($item?->qty ?? 0) + $qty;
-            $cap = min(self::MAX_QTY_PER_LINE, (int) $offer->stock);
+            $wanted = ($item ? $item->qty : 0) + $qty;
+            $cap = min(self::MAX_QTY_PER_LINE, (int) $listing->stock);
             $newQty = min($wanted, $cap);
             if ($item && $newQty <= $item->qty) {
                 return [false, "You already have the maximum available ({$item->qty})."];
             }
 
             $fields = ['qty' => $newQty, 'availability' => 'ok', 'available_qty' => null, 'synced_at' => now()]
-                + $this->display($offer)
-                + ['unit_price' => $this->toMinor($offer->price)];
+                + $this->display($listing)
+                + ['unit_price' => $this->toMinor($listing->selling_price)];
 
             if ($item) {
                 // Price the user sees now is the live one; clear any stale "price changed" marker.
                 $item->update($fields + ['prev_unit_price' => null]);
             } else {
-                $cart->items()->create($fields + ['offer_id' => $offer->id]);
+                $cart->items()->create($fields + ['listing_id' => $listing->id]);
             }
 
             $cart->forceFill(['last_activity_at' => now()])->save();
@@ -91,31 +108,43 @@ class CartService
         return $this->result($ok, $msg);
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function setQty(int $itemId, int $qty): array
     {
         return $this->updateQty($itemId, $qty, false);
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function increase(int $itemId, int $by = 1): array
     {
         return $this->updateQty($itemId, max(1, $by), true);
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function decrease(int $itemId, int $by = 1): array
     {
         return $this->updateQty($itemId, -max(1, $by), true);
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function updateQty(int $itemId, int $value, bool $relative): array
     {
         [$ok, $msg] = DB::transaction(function () use ($itemId, $value, $relative) {
             $cart = $this->lockedCart();
-            if (!$cart) {
+            if (! $cart) {
                 return [false, 'Cart not found.'];
             }
 
             $item = $cart->items()->whereKey($itemId)->first();
-            if (!$item) {
+            if (! $item) {
                 return [false, 'Item not found.'];
             }
 
@@ -124,16 +153,17 @@ class CartService
 
             if ($target <= 0) {
                 $item->delete();
+
                 return [true, 'Item removed.'];
             }
 
             if ($target > $item->qty) {
-                $offer = $this->offers([$item->offer_id])->get($item->offer_id);
-                [$status] = $this->availabilityOf($offer, 1);
+                $listing = $this->listings([$item->listing_id])->get($item->listing_id);
+                [$status] = $this->availabilityOf($listing, 1);
                 if ($status === 'unavailable' || $status === 'out_of_stock') {
                     return [false, 'This item is no longer available.'];
                 }
-                $cap = min(self::MAX_QTY_PER_LINE, (int) $offer->stock);
+                $cap = min(self::MAX_QTY_PER_LINE, (int) $listing->stock);
                 if ($cap <= $item->qty) {
                     return [false, "Maximum available quantity is {$item->qty}."];
                 }
@@ -149,6 +179,9 @@ class CartService
         return $this->result($ok, $msg);
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function remove(int $itemId): array
     {
         DB::transaction(function () use ($itemId) {
@@ -159,16 +192,22 @@ class CartService
         return $this->result(true, 'Item removed.');
     }
 
-    public function removeSeller(int $sellerId): array
+    /**
+     * @return array<string, mixed>
+     */
+    public function removeSeller(int $sellerProfileId): array
     {
-        DB::transaction(function () use ($sellerId) {
+        DB::transaction(function () use ($sellerProfileId) {
             $cart = $this->lockedCart();
-            $cart?->items()->where('seller_id', $sellerId)->delete();
+            $cart?->items()->where('seller_profile_id', $sellerProfileId)->delete();
         }, self::TX_ATTEMPTS);
 
         return $this->result(true, 'Seller items removed.');
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function clear(): array
     {
         DB::transaction(function () {
@@ -179,7 +218,11 @@ class CartService
         return $this->result(true, 'Cart cleared.');
     }
 
-    /** User saw the "price changed" notice and accepts the new prices. */
+    /**
+     * User saw the "price changed" notice and accepts the new prices.
+     *
+     * @return array<string, mixed>
+     */
     public function acknowledgePriceChanges(): array
     {
         if ($cart = $this->currentCart()) {
@@ -189,35 +232,72 @@ class CartService
         return $this->result(true, 'Prices accepted.');
     }
 
-    /** Call on the Login event. Moves/merges the guest cart into the user's cart. */
+    /**
+     * Call on the Login event. Moves/merges the guest cart into the user's cart.
+     */
     public function mergeGuestIntoUser(User $user): void
     {
-        $token = request()->cookie(self::COOKIE);
-        if (!$token) {
-            return;
+        $rawToken = request()->cookie(self::COOKIE) ?? Cookie::queued(self::COOKIE)?->getValue();
+        $token = is_string($rawToken) && $rawToken !== '' ? $rawToken : null;
+        $guest = null;
+
+        if ($token !== null) {
+            $guest = Cart::where('guest_token', hash('sha256', $token))->whereNull('user_id')->first();
         }
 
-        $guest = Cart::where('guest_token', hash('sha256', $token))->whereNull('user_id')->first();
-        if (!$guest) {
+        if (! $guest && $this->newGuestCart && $this->newGuestCart->user_id === null) {
+            $guest = $this->newGuestCart;
+        }
+
+        if (! $guest) {
             Cookie::queue(Cookie::forget(self::COOKIE));
+
             return;
         }
 
         $userCart = Cart::where('user_id', $user->id)->first() ?? $this->createCart(['user_id' => $user->id]);
 
-        DB::transaction(function () use ($guest, $userCart) {
+        DB::transaction(function () use ($guest, $userCart, $user) {
             // Lock both carts in id order so two merges can never deadlock each other.
             Cart::whereIn('id', [$guest->id, $userCart->id])->orderBy('id')->lockForUpdate()->get();
 
-            $existing = $userCart->items()->get()->keyBy('offer_id');
-            $lines = $existing->count();
+            $existing = $userCart->items()->get()->keyBy('listing_id');
+            $guestItems = $guest->items()->get();
+            $allListingIds = $guestItems->pluck('listing_id')->merge($existing->pluck('listing_id'))->unique()->all();
+            $listings = $this->listings($allListingIds);
 
-            foreach ($guest->items()->get() as $gItem) {
-                if ($mine = $existing->get($gItem->offer_id)) {
-                    $mine->update(['qty' => min($mine->qty + $gItem->qty, self::MAX_QTY_PER_LINE)]);
+            $lines = $existing->count();
+            $userSellerProfileId = $user->sellerProfile?->id;
+
+            foreach ($guestItems as $gItem) {
+                $listing = $listings->get($gItem->listing_id);
+                if (! $listing) {
+                    continue;
+                }
+
+                // Requirement 8: A seller can't add their own listings to their cart.
+                if ($userSellerProfileId && $listing->seller_profile_id === $userSellerProfileId) {
+                    continue;
+                }
+
+                // Requirement 6: On merge, cap qty by min(stock, MAX_QTY_PER_LINE).
+                $cap = min(max(0, (int) $listing->stock), self::MAX_QTY_PER_LINE);
+
+                if ($mine = $existing->get($gItem->listing_id)) {
+                    $wanted = $mine->qty + $gItem->qty;
+                    $newQty = min($wanted, $cap);
+                    if ($newQty > 0) {
+                        $mine->update(['qty' => $newQty]);
+                    }
                 } elseif ($lines < self::MAX_LINES) {
-                    $gItem->update(['cart_id' => $userCart->id]);
-                    $lines++;
+                    $newQty = min($gItem->qty, $cap);
+                    if ($newQty > 0) {
+                        $gItem->update([
+                            'cart_id' => $userCart->id,
+                            'qty' => $newQty,
+                        ]);
+                        $lines++;
+                    }
                 }
             }
 
@@ -240,13 +320,25 @@ class CartService
     }
 
     /**
-     * Full cart grouped by seller. Re-syncs prices/stock from live offers when the
+     * Check if a listing is currently in the active cart.
+     */
+    public function hasListing(int $listingId): bool
+    {
+        $cart = $this->currentCart();
+
+        return $cart ? $cart->items()->where('listing_id', $listingId)->exists() : false;
+    }
+
+    /**
+     * Full cart grouped by seller. Re-syncs prices/stock from live listings when the
      * snapshot is older than STALE_AFTER_SECONDS (or always when $force, e.g. before checkout).
+     *
+     * @return array<string, mixed>
      */
     public function view(bool $force = false): array
     {
         $cart = $this->currentCart();
-        if (!$cart) {
+        if (! $cart) {
             return $this->emptyView();
         }
 
@@ -256,7 +348,7 @@ class CartService
 
         $changes = $stale ? $this->reprice($cart) : [];
 
-        $items = $cart->items()->orderBy('seller_id')->orderBy('id')->get();
+        $items = $cart->items()->orderBy('seller_profile_id')->orderBy('id')->get();
         if ($items->isEmpty()) {
             return $this->emptyView();
         }
@@ -265,7 +357,7 @@ class CartService
         $subtotal = $mrpTotal = $units = 0;
         $issues = 0;
 
-        foreach ($items->groupBy('seller_id') as $sellerId => $rows) {
+        foreach ($items->groupBy('seller_profile_id') as $sellerProfileId => $rows) {
             $sSub = $sMrp = $sUnits = 0;
             $lines = [];
 
@@ -285,32 +377,33 @@ class CartService
                 }
 
                 $lines[] = [
-                    'id'              => $it->id,
-                    'offer_id'        => $it->offer_id,
-                    'product_id'      => $it->product_id,
-                    'variant_id'      => $it->variant_id,
-                    'seller_id'       => $it->seller_id,
-                    'name'            => $it->name,
-                    'sku'             => $it->sku,
-                    'image'           => $it->image,
-                    'qty'             => $it->qty,
-                    'unit_price'      => $it->unit_price,
-                    'mrp'             => $it->mrp,
-                    'line_total'      => $lineTotal,
-                    'price_changed'   => $it->prev_unit_price !== null,
+                    'id' => $it->id,
+                    'listing_id' => $it->listing_id,
+                    'product_id' => $it->product_id,
+                    'product_variant_id' => $it->product_variant_id,
+                    'seller_profile_id' => $it->seller_profile_id,
+                    'seller_name' => $it->seller_name,
+                    'name' => $it->name,
+                    'sku' => $it->sku,
+                    'image' => $it->image,
+                    'qty' => $it->qty,
+                    'unit_price' => $it->unit_price,
+                    'mrp' => $it->mrp,
+                    'line_total' => $lineTotal,
+                    'price_changed' => $it->prev_unit_price !== null,
                     'prev_unit_price' => $it->prev_unit_price,
-                    'availability'    => $it->availability,   // ok | insufficient | out_of_stock | unavailable
-                    'available_qty'   => $it->available_qty,
+                    'availability' => $it->availability,   // ok | insufficient | out_of_stock | unavailable
+                    'available_qty' => $it->available_qty,
                 ];
             }
 
             $sellers[] = [
-                'seller_id'   => (int) $sellerId,
+                'seller_profile_id' => (int) $sellerProfileId,
                 'seller_name' => $rows->first()->seller_name,
-                'items'       => $lines,
-                'units'       => $sUnits,
-                'subtotal'    => $sSub,
-                'mrp_total'   => $sMrp,
+                'items' => $lines,
+                'units' => $sUnits,
+                'subtotal' => $sSub,
+                'mrp_total' => $sMrp,
             ];
 
             $subtotal += $sSub;
@@ -319,26 +412,30 @@ class CartService
         }
 
         return [
-            'sellers'      => $sellers,
-            'lines'        => $items->count(),
-            'units'        => $units,        // only purchasable lines are counted in units and totals
-            'subtotal'     => $subtotal,     // paise
-            'mrp_total'    => $mrpTotal,     // paise
-            'savings'      => max(0, $mrpTotal - $subtotal),
+            'sellers' => $sellers,
+            'lines' => $items->count(),
+            'units' => $units,        // only purchasable lines are counted in units and totals
+            'subtotal' => $subtotal,     // paise
+            'mrp_total' => $mrpTotal,     // paise
+            'savings' => max(0, $mrpTotal - $subtotal),
             'price_changes' => $changes,     // only filled on the request that detected them
-            'has_issues'   => $issues > 0,
+            'has_issues' => $issues > 0,
             'can_checkout' => $issues === 0 && $units > 0,
         ];
     }
 
     // ───────────────────────── Internals ─────────────────────────
 
-    /** Batch re-sync of every line from the live offers (1 SELECT + writes only for changed rows). */
+    /**
+     * Batch re-sync of every line from the live listings (1 SELECT + writes only for changed rows).
+     *
+     * @return array<int, array<string, mixed>>
+     */
     private function reprice(Cart $cart): array
     {
         return DB::transaction(function () use ($cart) {
             $cart = Cart::whereKey($cart->id)->lockForUpdate()->first();
-            if (!$cart) {
+            if (! $cart) {
                 return [];
             }
 
@@ -347,27 +444,27 @@ class CartService
                 return [];
             }
 
-            $offers = $this->offers($items->pluck('offer_id')->all());
+            $listings = $this->listings($items->pluck('listing_id')->all());
             $changes = [];
             $untouched = [];
 
             foreach ($items as $item) {
-                $offer = $offers->get($item->offer_id);
-                [$status, $avail] = $this->availabilityOf($offer, $item->qty);
+                $listing = $listings->get($item->listing_id);
+                [$status, $avail] = $this->availabilityOf($listing, $item->qty);
 
                 $attrs = ['availability' => $status, 'available_qty' => $avail];
 
-                if ($offer) {
-                    $new = $this->toMinor($offer->price);
+                if ($listing) {
+                    $new = $this->toMinor($listing->selling_price);
                     $orig = $item->prev_unit_price ?? $item->unit_price; // the price the user originally saw
-                    $attrs += $this->display($offer);
+                    $attrs += $this->display($listing);
                     $attrs['unit_price'] = $new;
                     $attrs['prev_unit_price'] = $new === (int) $orig ? null : $orig;
 
                     if ($new !== (int) $item->unit_price) {
                         $changes[] = [
-                            'item_id'   => $item->id,
-                            'name'      => $item->name,
+                            'item_id' => $item->id,
+                            'name' => $item->name,
                             'old_price' => (int) $orig,
                             'new_price' => $new,
                         ];
@@ -383,7 +480,7 @@ class CartService
                 }
             }
 
-            if ($untouched) {
+            if (! empty($untouched)) {
                 CartItem::whereIn('id', $untouched)->update(['synced_at' => now()]);
             }
 
@@ -402,15 +499,16 @@ class CartService
             return $this->newGuestCart;
         }
 
-        $token = request()->cookie(self::COOKIE);
-        if ($token) {
+        $rawToken = request()->cookie(self::COOKIE);
+        $token = is_string($rawToken) && $rawToken !== '' ? $rawToken : null;
+        if ($token !== null) {
             $cart = Cart::where('guest_token', hash('sha256', $token))->whereNull('user_id')->first();
             if ($cart) {
                 return $cart;
             }
         }
 
-        if (!$create) {
+        if (! $create) {
             return null;
         }
 
@@ -428,6 +526,9 @@ class CartService
         return $cart ? Cart::whereKey($cart->id)->lockForUpdate()->first() : null;
     }
 
+    /**
+     * @param  array<string, mixed>  $attrs
+     */
     private function createCart(array $attrs): Cart
     {
         try {
@@ -438,45 +539,99 @@ class CartService
         }
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function result(bool $ok, string $message): array
     {
         return ['success' => $ok, 'message' => $message, 'cart' => $this->view()];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function emptyView(): array
     {
         return [
-            'sellers' => [], 'lines' => 0, 'units' => 0, 'subtotal' => 0, 'mrp_total' => 0,
-            'savings' => 0, 'price_changes' => [], 'has_issues' => false, 'can_checkout' => false,
+            'sellers' => [],
+            'lines' => 0,
+            'units' => 0,
+            'subtotal' => 0,
+            'mrp_total' => 0,
+            'savings' => 0,
+            'price_changes' => [],
+            'has_issues' => false,
+            'can_checkout' => false,
         ];
     }
 
+    /**
+     * Money is already stored as minor units (paise) on listings.
+     */
     private function toMinor(mixed $amount): int
     {
-        return (int) round(((float) $amount) * 100);
+        return (int) $amount;
     }
 
-    // ─────────── Offer schema adapters (edit these for your tables) ───────────
+    // ─────────── Listing schema adapters ───────────
 
-    /** @return Collection<int, ProductOffer> keyed by offer id */
-    private function offers(array $ids): Collection
+    /**
+     * @param  array<int, int>  $ids
+     * @return Collection<int, Listing> keyed by listing id
+     */
+    private function listings(array $ids): Collection
     {
-        return ProductOffer::with(['product:id,title,thumb_image', 'variant:id,name', 'seller:id,name'])
+        return Listing::withTrashed()
+            ->with([
+                'variant.product.images',
+                'variant.product.vertical.attributes',
+                'sellerProfile',
+            ])
             ->whereIn('id', $ids)
             ->get()
             ->keyBy('id');
     }
 
-    /** @return array{0:string,1:?int} [status, available qty when not ok] */
-    private function availabilityOf(?ProductOffer $offer, int $qty): array
+    /**
+     * Full visibility rule:
+     * - listing status Active (enum compare, not truthiness)
+     * - not archived / soft-deleted
+     * - variant approved
+     * - product approved
+     * - seller approved
+     *
+     * @return array{0: string, 1: ?int} [status, available qty when not ok]
+     */
+    private function availabilityOf(?Listing $listing, int $qty): array
     {
-        if (!$offer || !$offer->status || !$offer->product) {
+        if (! $listing || $listing->trashed()) {
             return ['unavailable', null];
         }
-        $stock = (int) $offer->stock;
+
+        if ($listing->status !== ListingStatus::Active) {
+            return ['unavailable', null];
+        }
+
+        $variant = $listing->relationLoaded('variant') ? $listing->variant : $listing->variant()->first();
+        if (! $variant || $variant->trashed() || $variant->qc_status !== VariantQcStatus::Approved) {
+            return ['unavailable', null];
+        }
+
+        $product = $variant->relationLoaded('product') ? $variant->product : $variant->product()->first();
+        if (! $product || $product->qc_status !== ProductQcStatus::Approved) {
+            return ['unavailable', null];
+        }
+
+        $seller = $listing->relationLoaded('sellerProfile') ? $listing->sellerProfile : $listing->sellerProfile()->first();
+        if (! $seller || $seller->status !== SellerStatus::Approved) {
+            return ['unavailable', null];
+        }
+
+        $stock = (int) $listing->stock;
         if ($stock <= 0) {
             return ['out_of_stock', 0];
         }
+
         if ($stock < $qty) {
             return ['insufficient', $stock];
         }
@@ -484,20 +639,55 @@ class CartService
         return ['ok', null];
     }
 
-    /** Snapshot columns copied from the live offer onto the cart line. */
-    private function display(ProductOffer $offer): array
+    /**
+     * Snapshot columns copied from the live listing onto the cart line.
+     * Line name = product title + variant attribute labels (e.g. "Black, M"); image = primary live product image.
+     *
+     * @return array<string, mixed>
+     */
+    private function display(Listing $listing): array
     {
-        $price = $this->toMinor($offer->price);
+        $variant = $listing->relationLoaded('variant') ? $listing->variant : $listing->variant()->first();
+        $product = $variant ? ($variant->relationLoaded('product') ? $variant->product : $variant->product()->first()) : null;
+        $seller = $listing->relationLoaded('sellerProfile') ? $listing->sellerProfile : $listing->sellerProfile()->first();
+
+        $labels = [];
+        if ($variant && ! empty($variant->variant_attributes)) {
+            foreach ($variant->variant_attributes as $code => $val) {
+                $label = $variant->optionDisplayLabel($code);
+                $labels[] = $label !== '' ? $label : (string) $val;
+            }
+        }
+        $labelsStr = implode(', ', array_filter($labels));
+        $productTitle = $product ? $product->title : 'Product';
+        $lineName = $labelsStr !== '' ? "{$productTitle} - {$labelsStr}" : $productTitle;
+
+        // Primary live product image
+        $primaryImg = null;
+        if ($product) {
+            if ($product->relationLoaded('images')) {
+                $primaryImg = $product->images->first(fn ($img) => $img->is_primary && $img->status === ProductImageStatus::Live)
+                    ?? $product->images->first(fn ($img) => $img->status === ProductImageStatus::Live)
+                    ?? $product->images->first();
+            } else {
+                $primaryImg = $product->images()->where('status', ProductImageStatus::Live)->orderByDesc('is_primary')->first()
+                    ?? $product->images()->first();
+            }
+        }
+        $image = $primaryImg ? $primaryImg->url() : null;
+
+        $price = $this->toMinor($listing->selling_price);
+        $mrp = $this->toMinor($listing->mrp);
 
         return [
-            'product_id'  => $offer->product_id,
-            'variant_id'  => $offer->variant_id,
-            'seller_id'   => $offer->seller_id,
-            'seller_name' => $offer->seller?->name,
-            'name'        => trim($offer->product->title . ($offer->variant ? ' - ' . $offer->variant->name : '')),
-            'sku'         => $offer->sku,
-            'image'       => $offer->product->thumb_image,
-            'mrp'         => max($this->toMinor($offer->mrp), $price),
+            'product_id' => $product ? $product->id : 0,
+            'product_variant_id' => $variant ? $variant->id : null,
+            'seller_profile_id' => $listing->seller_profile_id,
+            'seller_name' => $seller?->store_name,
+            'name' => $lineName,
+            'sku' => $listing->sku,
+            'image' => $image,
+            'mrp' => max($mrp, $price),
         ];
     }
 }

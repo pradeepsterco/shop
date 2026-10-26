@@ -33,6 +33,26 @@ Route::middleware(['auth:admin', EnsureAdminIsActive::class, AuthenticateAdminSe
     Route::livewire('catalog/brands', 'pages::admin.catalog.brands')->name('catalog.brands')->middleware('can:catalog.brands.manage');
     Route::livewire('catalog/products', 'pages::admin.catalog.products')->name('catalog.products')->middleware('can:catalog.products.view');
 
+    // Orders
+    Route::livewire('orders', 'pages::admin.orders-index')->name('orders.index')->middleware('can:orders.view');
+    Route::livewire('orders/{order}', 'pages::admin.orders-show')->name('orders.show')->middleware('can:orders.view');
+
+    // Fees & Commissions
+    Route::livewire('fees', 'pages::admin.fees-index')->name('fees.index')->middleware('can:fees.view');
+    Route::livewire('fees/create', 'pages::admin.fees-edit')->name('fees.create')->middleware('can:fees.manage');
+    Route::livewire('fees/{feeSchedule}', 'pages::admin.fees-show')->name('fees.show')->middleware('can:fees.view');
+    Route::livewire('fees/{feeSchedule}/edit', 'pages::admin.fees-edit')->name('fees.edit')->middleware('can:fees.manage');
+
+    // Settlements & Payouts
+    Route::livewire('settlements', 'pages::admin.settlements-index')->name('settlements.index')->middleware('can:settlements.view');
+    Route::livewire('settlements/reports', 'pages::admin.settlements-reports')->name('settlements.reports')->middleware('can:settlements.view');
+    Route::livewire('payouts', 'pages::admin.payouts-index')->name('payouts.index')->middleware('can:payouts.view');
+
+    // Shipping & Shipments
+    Route::livewire('shipping/settings', 'pages::admin.shipping-settings')->name('shipping.settings')->middleware('can:shipping.view');
+    Route::livewire('shipping/shipments', 'pages::admin.shipments-index')->name('shipments.index')->middleware('can:shipping.view');
+    Route::livewire('shipping/shipments/{shipment}', 'pages::admin.shipments-show')->name('shipments.show')->middleware('can:shipping.view');
+
     // Staff & Roles Management
     Route::livewire('staff', 'pages::admin.staff')->name('staff')->middleware('can:admins.view');
     Route::livewire('roles', 'pages::admin.roles')->name('roles')->middleware('can:roles.manage');

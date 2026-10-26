@@ -19,7 +19,27 @@ new class extends Component {
             'password' => $this->currentPasswordRules(),
         ]);
 
-        tap(Auth::user(), $logout(...))->delete();
+        /** @var \App\Models\User $user */
+        $user = Auth::user();
+
+        if ($user->hasOpenOrders() || ($user->sellerProfile && $user->sellerProfile->hasOpenOrders())) {
+            $this->addError('password', 'Cannot delete your account while you have active or undelivered orders (as customer or seller).');
+
+            return;
+        }
+
+        try {
+            if ($user->hasAnyOrders()) {
+                $user->anonymize();
+                $logout();
+            } else {
+                tap($user, $logout(...))->delete();
+            }
+        } catch (\DomainException $e) {
+            $this->addError('password', $e->getMessage());
+
+            return;
+        }
 
         $this->redirect('/', navigate: true);
     }

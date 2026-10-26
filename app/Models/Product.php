@@ -5,8 +5,11 @@ namespace App\Models;
 use App\Enums\BrandStatus;
 use App\Enums\ProductImageStatus;
 use App\Enums\ProductQcStatus;
+use App\Services\ProductBuyBoxService;
+use Database\Factories\ProductFactory;
 use DomainException;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -30,15 +33,24 @@ use Illuminate\Support\Str;
  * @property int|null $reviewed_by_admin_id
  * @property Carbon|null $reviewed_at
  * @property array<string, mixed>|null $pending_changes
+ * @property int|null $buy_box_listing_id
+ * @property int|null $min_price
+ * @property int|null $buy_box_mrp
+ * @property int|null $discount_percent
+ * @property bool $in_stock
  * @property Vertical|null $vertical
  * @property Brand|null $brand
  * @property SellerProfile|null $creator
  * @property Admin|null $reviewer
+ * @property Listing|null $buyBoxListing
  * @property Collection<int, ProductVariant> $variants
  * @property Collection<int, ProductImage> $images
  */
 class Product extends Model
 {
+    /** @use HasFactory<ProductFactory> */
+    use HasFactory;
+
     protected $fillable = [
         'vertical_id',
         'brand_id',
@@ -55,6 +67,11 @@ class Product extends Model
         'pending_changes',
         'needs_update',
         'needs_update_reason',
+        'buy_box_listing_id',
+        'min_price',
+        'buy_box_mrp',
+        'discount_percent',
+        'in_stock',
     ];
 
     protected function casts(): array
@@ -67,6 +84,7 @@ class Product extends Model
             'reviewed_at' => 'datetime',
             'needs_update' => 'boolean',
             'needs_update_reason' => 'array',
+            'in_stock' => 'boolean',
         ];
     }
 
@@ -76,6 +94,12 @@ class Product extends Model
             if (blank($product->slug)) {
                 $brandName = $product->brand ? $product->brand->name : 'brand';
                 $product->slug = Str::slug("{$brandName} {$product->title}");
+            }
+        });
+
+        static::saved(function (Product $product) {
+            if ($product->wasChanged('qc_status')) {
+                app(ProductBuyBoxService::class)->refresh($product);
             }
         });
     }
@@ -110,6 +134,14 @@ class Product extends Model
     public function reviewer(): BelongsTo
     {
         return $this->belongsTo(Admin::class, 'reviewed_by_admin_id');
+    }
+
+    /**
+     * @return BelongsTo<Listing, $this>
+     */
+    public function buyBoxListing(): BelongsTo
+    {
+        return $this->belongsTo(Listing::class, 'buy_box_listing_id');
     }
 
     /**

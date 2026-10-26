@@ -43,6 +43,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'ensure.seller' => EnsureUserIsApprovedSeller::class,
         ]);
 
+        $middleware->validateCsrfTokens(except: [
+            'webhooks/shipping/*',
+        ]);
+
         $middleware->redirectGuestsTo(function (Request $request) {
             if ($request->routeIs('admin.*') || str_contains((string) $request->header('referer'), '/admin') || $request->is('admin/*') || $request->is('admin')) {
                 return route('admin.login');

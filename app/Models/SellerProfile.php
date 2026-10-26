@@ -4,6 +4,9 @@ namespace App\Models;
 
 use App\Enums\SellerStatus;
 use App\Exceptions\InvalidSellerStatusTransitionException;
+use App\Orders\Enums\SellerOrderStatus;
+use App\Orders\Models\SellerOrder;
+use App\Services\ProductBuyBoxService;
 use Carbon\CarbonImmutable;
 use Database\Factories\SellerProfileFactory;
 use Illuminate\Database\Eloquent\Collection;
@@ -11,6 +14,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -305,12 +309,58 @@ class SellerProfile extends Model
     }
 
     /**
+     * @return HasMany<SellerOrder, $this>
+     */
+    public function sellerOrders(): HasMany
+    {
+        return $this->hasMany(SellerOrder::class);
+    }
+
+    /**
+     * Check if seller has open orders preventing account deletion.
+     */
+    public function hasOpenOrders(): bool
+    {
+        return $this->sellerOrders()
+            ->whereNotIn('status', [SellerOrderStatus::Delivered->value, SellerOrderStatus::Cancelled->value])
+            ->exists();
+    }
+
+    /**
+     * Check if the seller profile has been anonymized upon account deletion.
+     */
+    public function isAnonymized(): bool
+    {
+        return $this->store_name === 'Deleted seller'
+            || $this->user->name === 'Deleted user';
+    }
+
+    /**
      * The "booted" method of the model.
      */
     protected static function booted(): void
     {
         static::deleting(function (SellerProfile $profile): void {
+            if ($profile->hasOpenOrders()) {
+                throw new \DomainException('Cannot delete seller account with active or undelivered orders.');
+            }
+
             $profile->deleteFiles();
+        });
+
+        static::saved(function (SellerProfile $seller) {
+            if ($seller->wasChanged('status')) {
+                $productIds = DB::table('listings')
+                    ->join('product_variants', 'listings.product_variant_id', '=', 'product_variants.id')
+                    ->where('listings.seller_profile_id', $seller->id)
+                    ->pluck('product_variants.product_id')
+                    ->unique();
+
+                $service = app(ProductBuyBoxService::class);
+                foreach ($productIds as $pId) {
+                    $service->refresh($pId);
+                }
+            }
         });
     }
 }

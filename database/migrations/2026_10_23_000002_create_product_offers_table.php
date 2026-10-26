@@ -6,13 +6,18 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    // ADAPT: change these three to your real table names if they differ.
     private const PRODUCTS = 'products';
+
     private const VARIANTS = 'product_variants';
-    private const SELLERS  = 'sellers';
+
+    private const SELLERS = 'seller_profiles';
 
     public function up(): void
     {
+        if (Schema::hasTable('product_offers')) {
+            return;
+        }
+
         Schema::create('product_offers', function (Blueprint $table) {
             $table->id();
 
@@ -32,9 +37,6 @@ return new class extends Migration
             $table->timestamps();
             $table->softDeletes();                       // a deleted offer shows as "unavailable" in carts, not a crash
 
-            // One offer per seller per variant.
-            // Note: MySQL allows several NULL variant_id rows, so products without variants
-            // should still get a default variant, or enforce uniqueness in code.
             $table->unique(['seller_id', 'product_id', 'variant_id'], 'offers_seller_product_variant_unique');
             $table->index(['product_id', 'status']);
             $table->index('variant_id');

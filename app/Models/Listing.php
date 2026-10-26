@@ -5,10 +5,15 @@ namespace App\Models;
 use App\Enums\ListingStatus;
 use App\Enums\SellerStatus;
 use App\Enums\VariantQcStatus;
+use App\Services\ProductBuyBoxService;
+use Database\Factories\ListingFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * @property int $id
@@ -25,6 +30,9 @@ use Illuminate\Support\Carbon;
  */
 class Listing extends Model
 {
+    /** @use HasFactory<ListingFactory> */
+    use HasFactory;
+
     use SoftDeletes;
 
     protected $fillable = [
@@ -47,6 +55,24 @@ class Listing extends Model
         ];
     }
 
+    protected static function booted(): void
+    {
+        $refreshProductBuyBox = function (Listing $listing) {
+            if ($listing->product_variant_id) {
+                $productId = DB::table('product_variants')
+                    ->where('id', $listing->product_variant_id)
+                    ->value('product_id');
+                if ($productId) {
+                    app(ProductBuyBoxService::class)->refresh($productId);
+                }
+            }
+        };
+
+        static::saved($refreshProductBuyBox);
+        static::deleted($refreshProductBuyBox);
+        static::restored($refreshProductBuyBox);
+    }
+
     /**
      * @return BelongsTo<SellerProfile, $this>
      */
@@ -61,6 +87,14 @@ class Listing extends Model
     public function variant(): BelongsTo
     {
         return $this->belongsTo(ProductVariant::class, 'product_variant_id');
+    }
+
+    /**
+     * @return HasMany<CartItem, $this>
+     */
+    public function cartItems(): HasMany
+    {
+        return $this->hasMany(CartItem::class);
     }
 
     public function mrpInRupees(): float
