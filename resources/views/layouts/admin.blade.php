@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="dark">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,6 +11,7 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    @include('partials.theme-script')
 </head>
 <body class="min-h-screen bg-zinc-100 font-sans text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100">
     <div x-data="{ mobileMenuOpen: false }" class="flex min-h-screen">
@@ -228,11 +229,19 @@
                     </a>
                 </nav>
 
-                <div class="border-t border-zinc-200 pt-4 dark:border-zinc-800">
+                <div class="border-t border-zinc-200 p-4 dark:border-zinc-800 space-y-2">
+                    <a href="{{ route('products.index') }}"
+                       wire:navigate
+                       class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-white transition">
+                        <svg class="size-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                        </svg>
+                        <span>Visit Storefront</span>
+                    </a>
                     <form method="POST" action="{{ route('admin.logout') }}">
                         @csrf
                         <button type="submit"
-                                class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30">
+                                class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/30 dark:hover:text-red-300 cursor-pointer">
                             <svg class="size-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
                             </svg>
@@ -494,10 +503,19 @@
                     </a>
                 </div>
 
-                <div class="border-t border-zinc-200 p-4 dark:border-zinc-800">
+                <div class="border-t border-zinc-200 p-4 dark:border-zinc-800 space-y-2">
+                    <a href="{{ route('products.index') }}"
+                       @click="mobileMenuOpen = false"
+                       wire:navigate
+                       class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-white transition">
+                        <svg class="size-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                        </svg>
+                        <span>Visit Storefront</span>
+                    </a>
                     <form method="POST" action="{{ route('admin.logout') }}">
                         @csrf
-                        <button type="submit" class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30">
+                        <button type="submit" class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/30 dark:hover:text-red-300 cursor-pointer">
                             <svg class="size-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
                             </svg>
@@ -511,47 +529,7 @@
         <!-- Main Content Area -->
         <div class="flex flex-1 flex-col md:pl-64 min-w-0">
             <!-- Top Bar -->
-            <header class="sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between border-b border-zinc-200 bg-white/80 px-4 md:px-8 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-900/80">
-                <div class="flex items-center gap-3">
-                    <button type="button"
-                            @click="mobileMenuOpen = true"
-                            class="p-2 rounded-lg text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 md:hidden dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white"
-                            aria-label="Open sidebar">
-                        <svg class="size-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
-                        </svg>
-                    </button>
-                    <h1 class="text-base md:text-lg font-semibold text-zinc-900 dark:text-white truncate">
-                        {{ $title ?? 'Admin' }}
-                    </h1>
-                </div>
-
-                <div class="flex items-center gap-4">
-                    @if (Auth::guard('admin')->check())
-                        <div class="flex items-center gap-3">
-                            <div class="hidden sm:flex flex-col text-right">
-                                <span class="text-sm font-medium text-zinc-900 dark:text-white leading-tight">
-                                    {{ Auth::guard('admin')->user()->name }}
-                                </span>
-                                <span class="text-xs text-zinc-500 dark:text-zinc-400 leading-tight">
-                                    {{ Auth::guard('admin')->user()->email }}
-                                </span>
-                            </div>
-                            <span class="flex size-9 items-center justify-center rounded-full bg-zinc-200 text-zinc-800 dark:bg-zinc-700 dark:text-zinc-100 font-semibold text-xs ring-2 ring-zinc-300 dark:ring-zinc-600">
-                                {{ Auth::guard('admin')->user()->initials() }}
-                            </span>
-                        </div>
-
-                        <form method="POST" action="{{ route('admin.logout') }}" class="hidden sm:block">
-                            @csrf
-                            <button type="submit"
-                                    class="rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white transition">
-                                Log out
-                            </button>
-                        </form>
-                    @endif
-                </div>
-            </header>
+            <x-dashboard.topbar :title="$title ?? 'Admin Panel'" role="admin" guard="admin" />
 
             <!-- Main Body -->
             <main class="flex-1 p-4 md:p-8 max-w-7xl w-full mx-auto">

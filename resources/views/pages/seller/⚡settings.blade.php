@@ -65,7 +65,7 @@ new #[Layout('layouts.seller')] #[Title('Seller Settings')] class extends Compon
     }
 }; ?>
 
-<div class="space-y-6 max-w-3xl">
+<div class="space-y-6">
     <div>
         <h2 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">Bank & Payout Settings</h2>
         <p class="text-sm text-zinc-500 dark:text-zinc-400">Manage the bank account where marketplace sales payouts are deposited.</p>

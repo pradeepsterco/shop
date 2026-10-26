@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="dark">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,6 +11,7 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    @include('partials.theme-script')
 </head>
 <body class="min-h-screen bg-zinc-100 font-sans text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100">
     <div x-data="{ mobileMenuOpen: false }" class="flex min-h-screen">
@@ -275,48 +276,7 @@
         <!-- Main Content Area -->
         <div class="flex flex-1 flex-col md:pl-64 min-w-0">
             <!-- Top Bar -->
-            <header class="sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between border-b border-zinc-200 bg-white/80 px-4 md:px-8 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-900/80">
-                <div class="flex items-center gap-3">
-                    <button type="button"
-                            @click="mobileMenuOpen = true"
-                            class="p-2 rounded-lg text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 md:hidden dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white"
-                            aria-label="Open sidebar">
-                        <svg class="size-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
-                        </svg>
-                    </button>
-                    <h1 class="text-base md:text-lg font-semibold text-zinc-900 dark:text-white truncate">
-                        {{ $title ?? 'Seller Center' }}
-                    </h1>
-                </div>
-
-                <div class="flex items-center gap-4">
-                    <a href="{{ route('dashboard') }}"
-                       wire:navigate
-                       class="hidden sm:inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-xs hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition">
-                        <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
-                        </svg>
-                        <span>Switch to customer</span>
-                    </a>
-
-                    @if (auth()->check())
-                        <div class="flex items-center gap-3">
-                            <div class="hidden sm:flex flex-col text-right">
-                                <span class="text-sm font-medium text-zinc-900 dark:text-white leading-tight">
-                                    {{ auth()->user()->name }}
-                                </span>
-                                <span class="text-xs text-zinc-500 dark:text-zinc-400 leading-tight">
-                                    {{ auth()->user()->email }}
-                                </span>
-                            </div>
-                            <span class="flex size-9 items-center justify-center rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200 font-semibold text-xs ring-2 ring-emerald-300 dark:ring-emerald-700">
-                                {{ auth()->user()->initials() }}
-                            </span>
-                        </div>
-                    @endif
-                </div>
-            </header>
+            <x-dashboard.topbar :title="$title ?? 'Seller Center'" role="seller" guard="web" />
 
             <!-- Main Body -->
             <main class="flex-1 p-4 md:p-8 max-w-7xl w-full mx-auto">

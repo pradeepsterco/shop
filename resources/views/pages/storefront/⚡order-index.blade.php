@@ -22,7 +22,7 @@ new #[Layout('layouts.app')] #[Title('My Orders')] class extends Component {
     }
 }; ?>
 
-<div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+<div class="w-full space-y-6">
     <!-- Breadcrumb -->
     <nav class="mb-6 flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
         <a href="{{ route('products.index') }}" class="hover:text-zinc-800 dark:hover:text-zinc-200" wire:navigate>Home</a>

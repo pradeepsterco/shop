@@ -95,7 +95,7 @@ new #[Layout('layouts.seller')] #[Title('Monthly Tax Statement')] class extends 
     }
 }; ?>
 
-<div class="space-y-6 max-w-4xl mx-auto">
+<div class="space-y-6">
     <!-- Breadcrumb & Back -->
     <div class="flex items-center justify-between">
         <a href="{{ route('seller.payments.index') }}" wire:navigate class="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white transition">

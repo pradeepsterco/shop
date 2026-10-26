@@ -12,6 +12,7 @@
 
     @fonts
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    @include('partials.theme-script')
 </head>
 <body class="min-h-screen bg-zinc-50 font-sans text-zinc-900 antialiased selection:bg-amber-500 selection:text-white dark:bg-zinc-950 dark:text-zinc-100">
     <!-- Storefront Header Navigation -->
