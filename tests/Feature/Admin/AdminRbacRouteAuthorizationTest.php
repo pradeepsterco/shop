@@ -165,6 +165,7 @@ dataset('admin_protected_routes', [
     ['admin.shipping.settings', AdminPermissions::SHIPPING_VIEW],
     ['admin.shipments.index', AdminPermissions::SHIPPING_VIEW],
     ['admin.shipments.show', AdminPermissions::SHIPPING_VIEW],
+    ['admin.settings.branding', AdminPermissions::BRANDING_VIEW],
 ]);
 
 test('admin route returns 403 when staff lacks required permission and 200 when granted', function (string $routeName, string $permission) {

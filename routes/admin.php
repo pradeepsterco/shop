@@ -58,6 +58,9 @@ Route::middleware(['auth:admin', EnsureAdminIsActive::class, AuthenticateAdminSe
     Route::livewire('roles', 'pages::admin.roles')->name('roles')->middleware('can:roles.manage');
     Route::livewire('activity-logs', 'pages::admin.activity-logs')->name('activity-logs')->middleware('can:audit.view');
 
+    // Branding & Settings
+    Route::livewire('settings/branding', 'pages::admin.settings.branding')->name('settings.branding')->middleware('can:branding.view');
+
     Route::livewire('profile', 'pages::admin.profile')->name('profile');
 
     Route::post('logout', function (Request $request) {

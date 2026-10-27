@@ -6,6 +6,9 @@
 </head>
 <body style="font-family: sans-serif; background-color: #f4f4f5; margin: 0; padding: 24px; color: #18181b;">
     <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; padding: 32px; border: 1px solid #e4e4e7;">
+        <div style="margin-bottom: 24px;">
+            <x-brand.logo area="email" isEmail="true" />
+        </div>
         <h1 style="font-size: 20px; font-weight: bold; margin-top: 0; color: #18181b;">
             New Order Received!
         </h1>

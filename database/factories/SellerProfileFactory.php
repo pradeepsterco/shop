@@ -54,6 +54,13 @@ class SellerProfileFactory extends Factory
         ];
     }
 
+    public function draft(): static
+    {
+        return $this->state(fn () => [
+            'status' => SellerStatus::Draft,
+        ]);
+    }
+
     public function pending(): static
     {
         return $this->state(fn () => [

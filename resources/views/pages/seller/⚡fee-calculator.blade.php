@@ -25,11 +25,23 @@ new #[Layout('layouts.seller')] #[Title('Fee Calculator')] class extends Compone
 
     public bool $hasPan = true;
 
+    public bool $hasAssumptions = false;
+
     public function mount(): void
     {
         $profile = auth()->user()?->sellerProfile;
+
+        // Default to national zone and PAN provided
+        $this->zone = 'national';
+        $this->hasPan = true;
+
         if ($profile) {
-            $this->hasPan = ! empty($profile->pan);
+            if (! empty($profile->pan)) {
+                $this->hasPan = true;
+            }
+            $this->hasAssumptions = empty($profile->pan) || empty($profile->pickup_postal_code);
+        } else {
+            $this->hasAssumptions = true;
         }
     }
 
@@ -84,6 +96,20 @@ new #[Layout('layouts.seller')] #[Title('Fee Calculator')] class extends Compone
             Estimate your exact marketplace deductions, net bank payout, and claimable tax credits for any selling price.
         </p>
     </div>
+
+    @if ($this->hasAssumptions)
+        <div class="rounded-xl border border-sky-200 bg-sky-50 p-4 text-xs text-sky-800 dark:border-sky-900/50 dark:bg-sky-950/40 dark:text-sky-300 flex items-start gap-3">
+            <svg class="h-5 w-5 shrink-0 text-sky-600 dark:text-sky-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div>
+                <p class="font-semibold">Preview Assumptions Applied</p>
+                <p class="mt-0.5 text-sky-700 dark:text-sky-400">
+                    Your store setup is still in progress. The preview defaults to National shipping zone and assumes a valid PAN is provided (0.1% TDS). You can customize the parameters on the left to test different scenarios.
+                </p>
+            </div>
+        </div>
+    @endif
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <!-- Input Form (Left 1 col) -->

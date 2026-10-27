@@ -28,7 +28,7 @@ class SellerApplicationRejected extends Mailable implements ShouldQueue
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Seller Application Status - '.config('app.name', 'Khilauna'),
+            subject: 'Seller Application Status - '.brand_name(),
         );
     }
 

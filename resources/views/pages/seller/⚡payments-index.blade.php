@@ -246,7 +246,7 @@ new #[Layout('layouts.seller')] #[Title('Payments & Financials')] class extends 
                 <span class="text-xs font-bold text-zinc-900 dark:text-white">Claimable Direct & Indirect Tax Credits</span>
             </div>
             <p class="text-xs text-zinc-600 dark:text-zinc-400 mt-1">
-                TCS & TDS deducted by Khilauna are deposited directly with the Government and credit your GST Cash Ledger & Income Tax 26AS.
+                TCS & TDS deducted by {{ brand_name() }} are deposited directly with the Government and credit your GST Cash Ledger & Income Tax 26AS.
             </p>
         </div>
         <div class="text-right shrink-0">

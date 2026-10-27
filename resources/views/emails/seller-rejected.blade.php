@@ -4,6 +4,9 @@
     <meta charset="utf-8">
 </head>
 <body style="font-family: sans-serif; line-height: 1.5; color: #333;">
+    <div style="margin-bottom: 20px;">
+        <x-brand.logo area="email" isEmail="true" />
+    </div>
     <h2>Update on your seller application</h2>
     <p>Dear {{ $sellerProfile->user->name }},</p>
     <p>Thank you for your interest in becoming a seller with <strong>{{ $sellerProfile->store_name }}</strong>.</p>

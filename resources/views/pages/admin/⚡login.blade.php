@@ -78,9 +78,6 @@ new #[Layout('layouts.admin-auth')] #[Title('Admin Login')] class extends Compon
 
 <div class="rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
     <div class="mb-6 text-center">
-        <div class="mx-auto mb-3 flex size-12 items-center justify-center rounded-xl bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 text-lg font-black">
-            A
-        </div>
         <h1 class="text-xl font-bold tracking-tight text-zinc-900 dark:text-white">Admin Login</h1>
         <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Enter your credentials to access the admin panel</p>
     </div>

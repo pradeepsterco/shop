@@ -60,6 +60,10 @@ class AdminPermissions
 
     public const SHIPPING_MANAGE = 'shipping.manage';
 
+    public const BRANDING_VIEW = 'branding.view';
+
+    public const BRANDING_MANAGE = 'branding.manage';
+
     /**
      * Get all registered permissions grouped by module.
      *
@@ -203,6 +207,16 @@ class AdminPermissions
                 self::SHIPPING_MANAGE => [
                     'label' => 'Manage Shipping & Carriers',
                     'description' => 'Switch active carrier, test API connections, manage seller pickup registrations, and trigger NDR actions.',
+                ],
+            ],
+            'Branding & Settings' => [
+                self::BRANDING_VIEW => [
+                    'label' => 'View Branding',
+                    'description' => 'View marketplace branding, logos, and area names.',
+                ],
+                self::BRANDING_MANAGE => [
+                    'label' => 'Manage Branding',
+                    'description' => 'Update marketplace name, upload light/dark logos and favicon, or reset to default.',
                 ],
             ],
         ];

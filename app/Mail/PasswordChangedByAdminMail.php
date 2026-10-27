@@ -28,7 +28,7 @@ class PasswordChangedByAdminMail extends Mailable implements ShouldQueue
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Your Password Was Changed - '.config('app.name', 'Khilauna'),
+            subject: 'Your Password Was Changed - '.brand_name(),
         );
     }
 

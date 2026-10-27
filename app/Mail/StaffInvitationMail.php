@@ -28,7 +28,7 @@ class StaffInvitationMail extends Mailable implements ShouldQueue
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Staff Invitation - '.config('app.name', 'Khilauna').' Admin Panel',
+            subject: 'Staff Invitation - '.brand_name('admin'),
         );
     }
 

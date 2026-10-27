@@ -28,7 +28,7 @@ class CustomerWelcomeMail extends Mailable implements ShouldQueue
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Welcome to '.config('app.name', 'Khilauna').' - Set Your Password',
+            subject: 'Welcome to '.brand_name().' - Set Your Password',
         );
     }
 

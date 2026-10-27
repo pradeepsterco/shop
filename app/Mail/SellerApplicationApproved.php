@@ -27,7 +27,7 @@ class SellerApplicationApproved extends Mailable implements ShouldQueue
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Seller Application Approved - Welcome to '.config('app.name', 'Khilauna'),
+            subject: 'Seller Application Approved - Welcome to '.brand_name(),
         );
     }
 

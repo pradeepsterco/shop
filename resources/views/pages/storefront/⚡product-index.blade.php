@@ -22,7 +22,7 @@ use Livewire\Attributes\Url;
 use Livewire\Component;
 use Livewire\WithPagination;
 
-new #[Layout('layouts.storefront')] #[Title('Browse Products - Khilauna')] class extends Component {
+new #[Layout('layouts.storefront')] #[Title('Browse Products')] class extends Component {
     use WithPagination;
 
     #[Url(except: '')]

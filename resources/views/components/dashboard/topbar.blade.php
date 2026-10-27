@@ -15,7 +15,7 @@
             </svg>
         </button>
         <h1 class="text-base md:text-lg font-semibold text-zinc-900 dark:text-white truncate">
-            {{ $title ?? ($role === 'admin' ? 'Admin Panel' : ($role === 'seller' ? 'Seller Center' : 'Dashboard')) }}
+            {{ $title ?? ($role === 'admin' ? brand_name('admin') : ($role === 'seller' ? brand_name('seller') : 'Dashboard')) }}
         </h1>
     </div>
 

@@ -113,12 +113,12 @@ test('dashboard navigation displays switch links according to role', function ()
 
     $response = $this->actingAs($customer)->get(route('dashboard'));
     $response->assertOk()
-        ->assertSee('Become a Seller');
+        ->assertSee('Become a seller');
 
     $seller = User::factory()->create();
     SellerProfile::factory()->approved()->create(['user_id' => $seller->id]);
 
     $response2 = $this->actingAs($seller)->get(route('dashboard'));
     $response2->assertOk()
-        ->assertSee('Seller Dashboard');
+        ->assertSee('Switch to seller');
 });

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\AuthenticateAdminSession;
+use App\Http\Middleware\EnsureSellerCanFulfillOrders;
 use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\EnsureUserIsApprovedSeller;
 use App\Http\Middleware\EnsureUserPasswordChanged;
@@ -41,6 +42,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
         $middleware->alias([
             'ensure.seller' => EnsureUserIsApprovedSeller::class,
+            'ensure.seller.orders' => EnsureSellerCanFulfillOrders::class,
         ]);
 
         $middleware->validateCsrfTokens(except: [

@@ -477,3 +477,26 @@ test('view-only staff cannot invoke shipping management actions', function () {
         ->call('cancelShipment')
         ->assertForbidden();
 });
+
+test('view-only staff cannot invoke branding mutation actions', function () {
+    $staff = Admin::factory()->create();
+    $role = Role::findOrCreate('Branding Viewer', 'admin');
+    $role->syncPermissions([AdminPermissions::BRANDING_VIEW]);
+    $staff->assignRole($role);
+
+    Livewire::actingAs($staff, 'admin')
+        ->test('pages::admin.settings.branding')
+        ->assertOk()
+        ->call('saveGeneral')
+        ->assertForbidden();
+
+    Livewire::actingAs($staff, 'admin')
+        ->test('pages::admin.settings.branding')
+        ->call('saveLogo', 'storefront_logo_light')
+        ->assertForbidden();
+
+    Livewire::actingAs($staff, 'admin')
+        ->test('pages::admin.settings.branding')
+        ->call('resetLogo', 'storefront_logo_light')
+        ->assertForbidden();
+});

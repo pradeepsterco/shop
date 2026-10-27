@@ -68,7 +68,7 @@ new #[Layout('layouts.auth')] #[Title('Welcome - Set Your Password')] class exte
             request()->session()->put('password_hash_web', $user->getAuthPassword());
         }
 
-        session()->flash('status', 'Welcome to '.config('app.name', 'Khilauna').'! Your password has been set successfully.');
+        session()->flash('status', 'Welcome to '.brand_name().'! Your password has been set successfully.');
         $this->redirect(route('dashboard'), navigate: true);
     }
 }; ?>
@@ -76,7 +76,7 @@ new #[Layout('layouts.auth')] #[Title('Welcome - Set Your Password')] class exte
 <div class="flex flex-col gap-6">
     <x-auth-header
         title="Set Your Password"
-        :description="$isTokenValid ? 'Welcome to '.config('app.name', 'Khilauna').'! Please choose a password for your new account.' : 'This welcome link is invalid or has expired.'"
+        :description="$isTokenValid ? 'Welcome to '.brand_name().'! Please choose a password for your new account.' : 'This welcome link is invalid or has expired.'"
     />
 
     @if (! $isTokenValid)

@@ -5,10 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
-    <title>{{ filled($title ?? null) ? $title.' - '.config('app.name', 'Khilauna') : config('app.name', 'Khilauna') }}</title>
+    <title>{{ filled($title ?? null) ? $title.' - '.brand_name() : brand_name() }}</title>
 
-    <link rel="icon" href="/favicon.ico" sizes="any">
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <x-brand.favicon />
 
     @fonts
     @vite(['resources/css/app.css', 'resources/js/app.js'])
@@ -21,10 +20,7 @@
             <!-- Brand Logo -->
             <div class="flex items-center gap-6">
                 <a href="{{ route('products.index') }}" class="flex items-center gap-2.5 font-bold tracking-tight text-zinc-900 dark:text-white" wire:navigate>
-                    <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm">
-                        <x-app-logo-icon class="h-6 w-6 fill-current" />
-                    </span>
-                    <span class="text-xl tracking-tight">Khilauna<span class="text-amber-500">.com</span></span>
+                    <x-brand.logo area="storefront" size="lg" />
                 </a>
 
                 <nav class="hidden md:flex items-center gap-1">
@@ -76,16 +72,13 @@
         <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div class="flex flex-col items-center justify-between gap-6 sm:flex-row">
                 <div class="flex items-center gap-2">
-                    <span class="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500 text-white">
-                        <x-app-logo-icon class="h-4 w-4 fill-current" />
-                    </span>
-                    <span class="font-bold tracking-tight text-zinc-900 dark:text-white">Khilauna Store</span>
+                    <x-brand.logo area="storefront" size="sm" />
                 </div>
                 <p class="text-xs text-zinc-500 dark:text-zinc-400">
-                    &copy; {{ date('Y') }} Khilauna.com. All rights reserved. Premium multi-seller toys & lifestyle marketplace.
+                    &copy; {{ date('Y') }} {{ brand_name() }}. All rights reserved. Premium multi-seller marketplace.
                 </p>
                 <div class="flex items-center gap-4 text-xs text-zinc-500 dark:text-zinc-400">
-                    <a href="{{ route('seller.apply') }}" class="hover:text-zinc-800 dark:hover:text-zinc-200 transition">Sell on Khilauna</a>
+                    <a href="{{ route('seller.apply') }}" class="hover:text-zinc-800 dark:hover:text-zinc-200 transition">Sell on {{ brand_name() }}</a>
                     <span>&middot;</span>
                     <a href="{{ route('products.index') }}" class="hover:text-zinc-800 dark:hover:text-zinc-200 transition" wire:navigate>All Categories</a>
                 </div>

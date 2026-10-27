@@ -4,9 +4,12 @@
     <meta charset="utf-8">
 </head>
 <body style="font-family: sans-serif; line-height: 1.5; color: #333;">
-    <h2>Welcome to {{ config('app.name', 'Khilauna') }} Admin Team</h2>
+    <div style="margin-bottom: 20px;">
+        <x-brand.logo area="email" isEmail="true" />
+    </div>
+    <h2>Welcome to {{ brand_name('admin') }} Team</h2>
     <p>Hello {{ $admin->name }},</p>
-    <p>You have been invited to join the administrative team for <strong>{{ config('app.name', 'Khilauna') }}</strong>.</p>
+    <p>You have been invited to join the administrative team for <strong>{{ brand_name() }}</strong>.</p>
     <p>Please click the button below to set your password and activate your access:</p>
     <p>
         <a href="{{ $setUrl }}" style="display: inline-block; padding: 10px 20px; background-color: #18181b; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: bold;">

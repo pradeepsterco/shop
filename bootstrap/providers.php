@@ -1,5 +1,6 @@
 <?php
 
+use App\Branding\BrandingServiceProvider;
 use App\Catalog\CatalogServiceProvider;
 use App\Fees\FeesServiceProvider;
 use App\Orders\OrdersServiceProvider;
@@ -19,5 +20,6 @@ return [
     SellersServiceProvider::class,
     SettlementsServiceProvider::class,
     ShippingServiceProvider::class,
+    BrandingServiceProvider::class,
     ServiceProvider::class,
 ];
