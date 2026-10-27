@@ -163,6 +163,51 @@ class VariantSyncService
     }
 
     /**
+     * Update stock levels for a seller's listings on a given product using pessimistic locking and delta application.
+     *
+     * @param  array<int, array{original: int, new: int}>  $stockChanges  Keyed by listing_id
+     * @return array<int, int> Updated stock levels keyed by listing_id
+     */
+    public function updateStock(Product $product, SellerProfile $seller, array $stockChanges): array
+    {
+        return DB::transaction(function () use ($product, $seller, $stockChanges) {
+            /** @var Product $lockedProduct */
+            $lockedProduct = Product::where('id', $product->id)->lockForUpdate()->firstOrFail();
+
+            $updatedStocks = [];
+
+            foreach ($stockChanges as $listingId => $change) {
+                /** @var Listing|null $listing */
+                $listing = Listing::where('id', $listingId)
+                    ->where('seller_profile_id', $seller->id)
+                    ->whereHas('variant', fn ($q) => $q->where('product_id', $lockedProduct->id))
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $listing) {
+                    continue;
+                }
+
+                $original = (int) $change['original'];
+                $new = (int) $change['new'];
+                $delta = $new - $original;
+
+                // Apply delta to fresh locked database stock so concurrent sales are not wiped
+                $currentDbStock = (int) $listing->stock;
+                $finalStock = max(0, min(999999, $currentDbStock + $delta));
+
+                $listing->update(['stock' => $finalStock]);
+                $updatedStocks[$listing->id] = $finalStock;
+            }
+
+            // Re-evaluate integrity and update needs_update flag
+            $lockedProduct->flagNeedsUpdate();
+
+            return $updatedStocks;
+        });
+    }
+
+    /**
      * Remove or archive a specific variant for a seller.
      * Enforces rules:
      * - No history (no orders, cart/wishlist, no other seller listing, never QC approved): soft-delete variant & listing

@@ -17,9 +17,22 @@
         /* When inside the preview iframe, hide toolbar and outer shell, show the storefront content */
         html.is-preview-frame #preview-header { display: none !important; }
         html.is-preview-frame #preview-parent-shell { display: none !important; }
-        html.is-preview-frame body { background: #ffffff !important; padding: 0 !important; margin: 0 !important; }
-        :root.dark html.is-preview-frame body,
-        .dark html.is-preview-frame body { background: #09090b !important; }
+
+        /* Ensure iframe background and text colors match current light/dark theme perfectly */
+        html.is-preview-frame body {
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+        html.is-preview-frame.dark body,
+        html.is-preview-frame.dark {
+            background-color: #09090b !important;
+            color: #f4f4f5 !important;
+        }
+        html.is-preview-frame:not(.dark) body,
+        html.is-preview-frame:not(.dark) {
+            background-color: #ffffff !important;
+            color: #18181b !important;
+        }
 
         /* When in top window (parent), hide raw content so it only renders inside the responsive iframe */
         html:not(.is-preview-frame) #preview-raw-content { display: none !important; }
@@ -67,7 +80,7 @@
                     id="btn-viewport-desktop"
                     @click="setMode('desktop')"
                     onclick="window.__setPreviewViewport && window.__setPreviewViewport('desktop')"
-                    class="rounded px-2.5 py-1 text-xs font-semibold transition bg-white text-zinc-900 shadow-xs dark:bg-zinc-700 dark:text-white"
+                    class="rounded px-2.5 py-1 text-xs font-semibold transition bg-white text-zinc-900 shadow-xs dark:bg-zinc-700 dark:text-white cursor-pointer"
                     title="Desktop View"
                 >
                     Desktop
@@ -77,14 +90,16 @@
                     id="btn-viewport-mobile"
                     @click="setMode('mobile')"
                     onclick="window.__setPreviewViewport && window.__setPreviewViewport('mobile')"
-                    class="rounded px-2.5 py-1 text-xs font-semibold transition text-zinc-500 hover:text-zinc-900 dark:text-zinc-400"
+                    class="rounded px-2.5 py-1 text-xs font-semibold transition text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 cursor-pointer"
                     title="Mobile View"
                 >
                     Mobile
                 </button>
             </div>
 
-            <div class="flex items-center gap-2">
+            <!-- Right side: Theme Switcher & Preview Badge -->
+            <div class="flex items-center gap-3">
+                <x-theme-switcher />
                 <span class="rounded bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 dark:bg-amber-950 dark:text-amber-300">
                     PREVIEW MODE
                 </span>
@@ -147,14 +162,38 @@
 
                 if (mode === 'mobile') {
                     frameBox.className = 'transition-all duration-300 w-[390px] h-[844px] my-6 mx-auto rounded-[40px] border-8 border-zinc-800 shadow-2xl overflow-hidden bg-white dark:bg-zinc-950 shrink-0';
-                    btnDesk.className = 'rounded px-2.5 py-1 text-xs font-semibold transition text-zinc-500 hover:text-zinc-900 dark:text-zinc-400';
-                    btnMob.className = 'rounded px-2.5 py-1 text-xs font-semibold transition bg-white text-zinc-900 shadow-xs dark:bg-zinc-700 dark:text-white';
+                    btnDesk.className = 'rounded px-2.5 py-1 text-xs font-semibold transition text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 cursor-pointer';
+                    btnMob.className = 'rounded px-2.5 py-1 text-xs font-semibold transition bg-white text-zinc-900 shadow-xs dark:bg-zinc-700 dark:text-white cursor-pointer';
                 } else {
                     frameBox.className = 'transition-all duration-300 w-full h-[calc(100vh-80px)] max-w-7xl bg-white dark:bg-zinc-950 rounded-2xl shadow-sm overflow-hidden';
-                    btnDesk.className = 'rounded px-2.5 py-1 text-xs font-semibold transition bg-white text-zinc-900 shadow-xs dark:bg-zinc-700 dark:text-white';
-                    btnMob.className = 'rounded px-2.5 py-1 text-xs font-semibold transition text-zinc-500 hover:text-zinc-900 dark:text-zinc-400';
+                    btnDesk.className = 'rounded px-2.5 py-1 text-xs font-semibold transition bg-white text-zinc-900 shadow-xs dark:bg-zinc-700 dark:text-white cursor-pointer';
+                    btnMob.className = 'rounded px-2.5 py-1 text-xs font-semibold transition text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 cursor-pointer';
                 }
             };
+
+            // Broadcast theme change to iframe whenever appearance changes
+            const broadcastTheme = () => {
+                const previewFrame = document.getElementById('preview-iframe');
+                if (previewFrame && previewFrame.contentWindow) {
+                    previewFrame.contentWindow.postMessage({ type: 'flux-theme-sync' }, '*');
+                }
+            };
+
+            window.addEventListener('storage', (e) => {
+                if (e.key === 'flux.appearance') broadcastTheme();
+            });
+
+            const themeObserver = new MutationObserver(broadcastTheme);
+            themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+        } else {
+            // Inside iframe: listen for theme changes from parent window
+            window.addEventListener('message', (e) => {
+                if (e.data && e.data.type === 'flux-theme-sync') {
+                    const theme = (window.Flux && window.Flux.appearance) || localStorage.getItem('flux.appearance') || 'system';
+                    const isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                    document.documentElement.classList.toggle('dark', isDark);
+                }
+            });
         }
     </script>
 </body>

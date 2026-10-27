@@ -5,6 +5,7 @@ use App\Enums\ProductQcStatus;
 use App\Models\Product;
 use App\Models\SellerProfile;
 use App\Models\User;
+use App\Services\VariantSyncService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Computed;
@@ -21,6 +22,11 @@ new #[Layout('layouts.seller')] #[Title('My Products')] class extends Component 
 
     public ?int $selectedProductId = null;
     public bool $showDetailModal = false;
+
+    public bool $showStockModal = false;
+    public ?int $stockModalProductId = null;
+    public array $stockData = [];
+    public array $openedListingIds = [];
 
     #[Computed]
     public function sellerProfile(): ?SellerProfile
@@ -51,6 +57,136 @@ new #[Layout('layouts.seller')] #[Title('My Products')] class extends Component 
     {
         $this->showDetailModal = false;
         $this->selectedProductId = null;
+    }
+
+    public function openStockModal(int $id): void
+    {
+        $seller = $this->sellerProfile;
+        if (! $seller) {
+            return;
+        }
+
+        $product = Product::with([
+            'variants.listings' => fn ($q) => $q->where('seller_profile_id', $seller->id),
+        ])
+            ->where(function ($q) use ($seller) {
+                $q->where('created_by', $seller->id)
+                    ->orWhereHas('listings', fn ($l) => $l->where('seller_profile_id', $seller->id));
+            })
+            ->find($id);
+
+        if (! $product) {
+            return;
+        }
+
+        $this->stockModalProductId = $product->id;
+        $this->stockData = [];
+        $this->openedListingIds = [];
+        $this->resetErrorBag();
+
+        foreach ($product->variants as $variant) {
+            $listing = $variant->listings->first();
+            if ($listing) {
+                $this->openedListingIds[] = $listing->id;
+                $label = is_array($variant->variant_attributes) && ! empty($variant->variant_attributes)
+                    ? collect($variant->variant_attributes)->map(fn ($v, $k) => ucfirst($k).': '.$v)->implode(', ')
+                    : ($variant->variant_key ?: $variant->upid);
+
+                $this->stockData[$listing->id] = [
+                    'listing_id' => $listing->id,
+                    'original' => (int) $listing->stock,
+                    'current' => (int) $listing->stock,
+                    'variant_label' => $label,
+                    'sku' => $listing->sku ?: '—',
+                ];
+            }
+        }
+
+        $this->showStockModal = true;
+    }
+
+    public function closeStockModal(): void
+    {
+        $this->showStockModal = false;
+        $this->stockModalProductId = null;
+        $this->stockData = [];
+        $this->openedListingIds = [];
+        $this->resetErrorBag();
+    }
+
+    public function setStockZero(int $listingId): void
+    {
+        if (isset($this->stockData[$listingId])) {
+            $this->stockData[$listingId]['current'] = 0;
+        }
+    }
+
+    public function saveStock(): void
+    {
+        $seller = $this->sellerProfile;
+        if (! $seller || ! $this->stockModalProductId) {
+            return;
+        }
+
+        $product = Product::where(function ($q) use ($seller) {
+            $q->where('created_by', $seller->id)
+                ->orWhereHas('listings', fn ($l) => $l->where('seller_profile_id', $seller->id));
+        })->find($this->stockModalProductId);
+
+        if (! $product) {
+            abort(403, 'Unauthorized product access.');
+        }
+
+        $this->validate([
+            'stockData' => ['required', 'array'],
+            'stockData.*.current' => ['required', 'integer', 'min:0', 'max:999999'],
+        ], [
+            'stockData.*.current.required' => 'Stock is required.',
+            'stockData.*.current.integer' => 'Stock must be an integer.',
+            'stockData.*.current.min' => 'Stock cannot be negative.',
+            'stockData.*.current.max' => 'Stock cannot exceed 999,999.',
+        ]);
+
+        $stockChanges = [];
+        foreach ($this->stockData as $listingId => $data) {
+            if (! in_array($listingId, $this->openedListingIds, true)) {
+                abort(403, 'Unauthorized listing offer.');
+            }
+
+            $stockChanges[$listingId] = [
+                'original' => (int) $data['original'],
+                'new' => (int) $data['current'],
+            ];
+        }
+
+        $syncService = new VariantSyncService();
+        $syncService->updateStock($product, $seller, $stockChanges);
+
+        $title = $product->title;
+        $this->closeStockModal();
+        session()->flash('status', "Stock updated successfully for [{$title}].");
+    }
+
+    #[Computed]
+    public function stockModalProduct(): ?Product
+    {
+        if (! $this->stockModalProductId) {
+            return null;
+        }
+
+        $seller = $this->sellerProfile;
+        if (! $seller) {
+            return null;
+        }
+
+        return Product::with([
+            'variants.listings' => fn ($q) => $q->where('seller_profile_id', $seller->id),
+        ])
+            ->where(function ($q) use ($seller) {
+                $q->where('created_by', $seller->id)
+                    ->orWhereHas('listings', fn ($l) => $l->where('seller_profile_id', $seller->id));
+            })
+            ->find($this->stockModalProductId);
     }
 
     public function deleteDraft(int $id): void
@@ -288,9 +424,14 @@ new #[Layout('layouts.seller')] #[Title('My Products')] class extends Component 
 
                                 <div>
                                     <span>Stock:</span>
-                                    <strong class="{{ $totalStock > 0 ? 'text-zinc-800 dark:text-zinc-200' : 'text-red-500 font-bold' }}">
-                                        {{ $totalStock }} units
-                                    </strong>
+                                    <button type="button" wire:click="openStockModal({{ $prod->id }})"
+                                            class="inline-flex items-center gap-1 font-bold underline decoration-dotted hover:decoration-solid cursor-pointer {{ $totalStock > 0 ? 'text-zinc-800 dark:text-zinc-200' : 'text-red-500' }}"
+                                            title="Click to update stock">
+                                        <span>{{ $totalStock }} units</span>
+                                        <svg class="size-3 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                        </svg>
+                                    </button>
                                 </div>
 
                                 @if ($minPrice !== null)
@@ -355,8 +496,13 @@ new #[Layout('layouts.seller')] #[Title('My Products')] class extends Component 
                         </div>
 
                         <div class="flex items-center gap-2">
+                            <button type="button" wire:click="openStockModal({{ $prod->id }})"
+                                    class="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 dark:hover:text-white transition cursor-pointer">
+                                Stock
+                            </button>
+
                             <button type="button" wire:click="openDetailModal({{ $prod->id }})"
-                                    class="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition">
+                                    class="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 dark:hover:text-white transition cursor-pointer">
                                 Details
                             </button>
 
@@ -533,6 +679,99 @@ new #[Layout('layouts.seller')] #[Title('My Products')] class extends Component 
                         </a>
                     @endif
                 </div>
+            </div>
+        </div>
+    @endif
+
+    <!-- QUICK STOCK UPDATE MODAL -->
+    @if ($showStockModal && $this->stockModalProduct)
+        @php
+            $prod = $this->stockModalProduct;
+        @endphp
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+            <div wire:click="closeStockModal" class="fixed inset-0 bg-zinc-950/60 backdrop-blur-xs"></div>
+
+            <div class="relative w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 space-y-5">
+                <div class="flex items-start justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800">
+                    <div class="min-w-0 pr-4">
+                        <div class="flex items-center gap-2">
+                            <span class="rounded bg-zinc-100 px-2 py-0.5 text-[11px] font-semibold text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                                Quick Stock Update
+                            </span>
+                        </div>
+                        <h3 class="mt-1 text-base font-bold text-zinc-900 dark:text-white truncate">{{ $prod->title }}</h3>
+                        <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                            Update inventory levels directly. Changes apply immediately.
+                        </p>
+                    </div>
+                    <button type="button" wire:click="closeStockModal" class="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 cursor-pointer">
+                        <svg class="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <form wire:submit="saveStock" class="space-y-4">
+                    <div class="divide-y divide-zinc-100 dark:divide-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden bg-zinc-50/50 dark:bg-zinc-800/20">
+                        @forelse ($stockData as $lId => $item)
+                            <div class="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div class="min-w-0 flex-1">
+                                    <div class="font-medium text-xs text-zinc-900 dark:text-white truncate">
+                                        {{ $item['variant_label'] ?? 'Variant' }}
+                                    </div>
+                                    <div class="flex items-center gap-2 mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">
+                                        <span>SKU: <code class="font-mono">{{ $item['sku'] ?? '—' }}</code></span>
+                                        <span>&bull;</span>
+                                        <span>Current: <strong class="text-zinc-700 dark:text-zinc-300">{{ $item['original'] ?? 0 }}</strong></span>
+                                    </div>
+                                    @error("stockData.{$lId}.current")
+                                        <p class="text-[11px] text-red-600 dark:text-red-400 mt-1">{{ $message }}</p>
+                                    @enderror
+                                </div>
+
+                                <div class="flex items-center gap-2 shrink-0">
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        max="999999"
+                                        step="1"
+                                        wire:model="stockData.{{ $lId }}.current"
+                                        class="w-24 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-center text-xs font-mono font-bold text-zinc-900 shadow-2xs focus:border-zinc-950 focus:outline-hidden dark:border-zinc-700 dark:bg-zinc-800 dark:text-white dark:focus:border-white"
+                                    />
+                                    <button
+                                        type="button"
+                                        wire:click="setStockZero({{ $lId }})"
+                                        class="rounded-lg border border-zinc-200 bg-zinc-100 px-2.5 py-1.5 text-[11px] font-semibold text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700 dark:hover:text-white transition cursor-pointer"
+                                        title="Set stock to 0"
+                                    >
+                                        Set to 0
+                                    </button>
+                                </div>
+                            </div>
+                        @empty
+                            <div class="p-6 text-center text-xs text-zinc-500 dark:text-zinc-400">
+                                No active listings found for this product.
+                            </div>
+                        @endforelse
+                    </div>
+
+                    <div class="flex items-center justify-between pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                        <button type="button" wire:click="closeStockModal" class="btn-secondary">
+                            Cancel
+                        </button>
+
+                        <button type="submit" class="btn-primary" wire:loading.attr="disabled">
+                            <span wire:loading.remove wire:target="saveStock">Save Stock</span>
+                            <span wire:loading wire:target="saveStock" class="inline-flex items-center gap-1.5">
+                                <svg class="size-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                                </svg>
+                                <span>Saving...</span>
+                            </span>
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
     @endif

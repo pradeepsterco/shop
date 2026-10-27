@@ -39,8 +39,10 @@
                 </nav>
             </div>
 
-            <!-- Cart & Customer Account / Auth Links -->
-            <div class="flex items-center gap-3">
+            <!-- Theme, Cart & Customer Account / Auth Links -->
+            <div class="flex items-center gap-2 sm:gap-3">
+                <x-theme-switcher />
+
                 <livewire:header-cart-badge />
 
                 @auth

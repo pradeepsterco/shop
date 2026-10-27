@@ -155,3 +155,50 @@ test('preview viewport toggle uses alpine buttons not url links so signature sta
         // Alpine data attribute must be present (client-side state).
         ->toContain('x-data');
 });
+
+test('preview and storefront final page include theme switcher and support light dark system mode', function () {
+    $admin = Admin::factory()->create();
+    $admin->givePermissionTo(AdminPermissions::PAGES_VIEW);
+
+    $page = ContentPage::create([
+        'title' => 'Theme Support Test Page',
+        'slug' => 'theme-support-test',
+        'type' => PageType::Static,
+        'status' => PageStatus::Published,
+    ]);
+
+    ContentSection::create([
+        'page_id' => $page->id,
+        'type' => 'rich_text',
+        'schema_version' => 1,
+        'position' => 1,
+        'visibility' => SectionVisibility::All,
+        'settings' => [
+            'content' => "# Contact Support\n\nReach out to customer care anytime.",
+        ],
+    ]);
+
+    $signedUrl = URL::temporarySignedRoute(
+        'admin.pages.preview',
+        now()->addMinutes(30),
+        ['page' => $page]
+    );
+
+    // 1. Preview page includes theme switcher and theme scripts
+    $previewHtml = $this->actingAs($admin, 'admin')->get($signedUrl)->assertOk()->getContent();
+    expect($previewHtml)
+        ->toContain('setAppearance(\'light\')')
+        ->toContain('setAppearance(\'dark\')')
+        ->toContain('setAppearance(\'system\')')
+        ->toContain('html.is-preview-frame.dark')
+        ->toContain('html.is-preview-frame:not(.dark)');
+
+    // 2. Final storefront page includes theme switcher and visible high-contrast prose styles
+    $finalHtml = $this->get('/pages/theme-support-test')->assertOk()->getContent();
+    expect($finalHtml)
+        ->toContain('setAppearance(\'light\')')
+        ->toContain('setAppearance(\'dark\')')
+        ->toContain('setAppearance(\'system\')')
+        ->toContain('Contact Support')
+        ->toContain('dark:text-zinc-100');
+});
