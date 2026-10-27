@@ -1,5 +1,7 @@
 <?php
 
+use App\Content\Models\ContentPage;
+use App\Content\Services\PageResolver;
 use App\Http\Controllers\Admin\AdminSellerDocumentController;
 use App\Http\Middleware\AuthenticateAdminSession;
 use App\Http\Middleware\EnsureAdminIsActive;
@@ -60,6 +62,22 @@ Route::middleware(['auth:admin', EnsureAdminIsActive::class, AuthenticateAdminSe
 
     // Branding & Settings
     Route::livewire('settings/branding', 'pages::admin.settings.branding')->name('settings.branding')->middleware('can:branding.view');
+
+    // Content & Pages
+    Route::livewire('pages', 'pages::admin.content.pages-index')->name('pages.index')->middleware('can:pages.view');
+    Route::livewire('pages/{page}/builder', 'pages::admin.content.page-builder')->name('pages.builder')->middleware('can:pages.manage');
+    Route::get('pages/{page}/preview', function (ContentPage $page, Request $request, PageResolver $resolver) {
+        if (! $request->hasValidSignature()) {
+            abort(403, 'Invalid or expired preview signature.');
+        }
+
+        $resolvedPage = $resolver->resolve($page, 'preview');
+
+        return response()->view('pages.admin.content.preview', [
+            'page' => $page,
+            'resolvedPage' => $resolvedPage,
+        ])->header('X-Robots-Tag', 'noindex, nofollow');
+    })->name('pages.preview')->middleware('can:pages.view');
 
     Route::livewire('profile', 'pages::admin.profile')->name('profile');
 

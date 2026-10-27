@@ -2,7 +2,9 @@
 
 namespace App\Catalog;
 
+use App\Catalog\Contracts\CatalogReadInterface;
 use App\Catalog\Contracts\VerticalLookupInterface;
+use App\Catalog\Services\CatalogReadService;
 use App\Catalog\Services\VerticalLookupService;
 use Illuminate\Support\ServiceProvider;
 
@@ -13,6 +15,7 @@ class CatalogServiceProvider extends ServiceProvider
      */
     public array $bindings = [
         VerticalLookupInterface::class => VerticalLookupService::class,
+        CatalogReadInterface::class => CatalogReadService::class,
     ];
 
     public function register(): void

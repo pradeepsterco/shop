@@ -23,3 +23,6 @@ Schedule::command('settlements:payout-batch')
 
 Schedule::command('shipping:poll-tracking')
     ->everyFifteenMinutes();
+
+Schedule::command('content:publish-scheduled')
+    ->everyMinute();

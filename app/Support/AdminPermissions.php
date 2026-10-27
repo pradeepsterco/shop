@@ -64,6 +64,12 @@ class AdminPermissions
 
     public const BRANDING_MANAGE = 'branding.manage';
 
+    public const PAGES_VIEW = 'pages.view';
+
+    public const PAGES_MANAGE = 'pages.manage';
+
+    public const PAGES_PUBLISH = 'pages.publish';
+
     /**
      * Get all registered permissions grouped by module.
      *
@@ -217,6 +223,20 @@ class AdminPermissions
                 self::BRANDING_MANAGE => [
                     'label' => 'Manage Branding',
                     'description' => 'Update marketplace name, upload light/dark logos and favicon, or reset to default.',
+                ],
+            ],
+            'Content & Pages' => [
+                self::PAGES_VIEW => [
+                    'label' => 'View Pages',
+                    'description' => 'View pages listing and preview drafts.',
+                ],
+                self::PAGES_MANAGE => [
+                    'label' => 'Manage Pages',
+                    'description' => 'Create pages, edit sections, reorder items, and upload media.',
+                ],
+                self::PAGES_PUBLISH => [
+                    'label' => 'Publish Pages',
+                    'description' => 'Publish pages, schedule publication, and rollback versions.',
                 ],
             ],
         ];
