@@ -412,6 +412,12 @@ new #[Layout('layouts.admin')] #[Title('Order Details')] class extends Component
                             <span>Catalog Discount</span>
                             <span>−₹{{ number_format($order->discount_total / 100) }}</span>
                         </div>
+                        @if (($order->coupon_discount_total ?? 0) > 0)
+                            <div class="flex justify-between text-emerald-600 dark:text-emerald-400 font-medium">
+                                <span>Coupon ({{ $order->coupon_code }})</span>
+                                <span>−₹{{ number_format($order->coupon_discount_total / 100) }}</span>
+                            </div>
+                        @endif
                         <div class="flex justify-between text-zinc-600 dark:text-zinc-400">
                             <span>Delivery Fee</span>
                             <span>{{ $order->delivery_fee === 0 ? 'FREE' : '₹' . number_format($order->delivery_fee / 100) }}</span>

@@ -79,6 +79,11 @@ Route::middleware(['auth:admin', EnsureAdminIsActive::class, AuthenticateAdminSe
         ])->header('X-Robots-Tag', 'noindex, nofollow');
     })->name('pages.preview')->middleware('can:pages.view');
 
+    // Coupons & Promotions
+    Route::livewire('coupons', 'pages::admin.coupons.index')->name('coupons.index')->middleware('can:coupons.view');
+    Route::livewire('coupons/create', 'pages::admin.coupons.create')->name('coupons.create')->middleware('can:coupons.manage');
+    Route::livewire('coupons/{coupon}/edit', 'pages::admin.coupons.edit')->name('coupons.edit')->middleware('can:coupons.manage');
+
     Route::livewire('profile', 'pages::admin.profile')->name('profile');
 
     Route::post('logout', function (Request $request) {

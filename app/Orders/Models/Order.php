@@ -51,6 +51,8 @@ class Order extends Model
         'payment_status',
         'items_mrp_total',
         'discount_total',
+        'coupon_code',
+        'coupon_discount_total',
         'delivery_fee',
         'grand_total',
         'placed_at',
@@ -69,6 +71,7 @@ class Order extends Model
             'placed_at' => 'datetime',
             'items_mrp_total' => 'integer',
             'discount_total' => 'integer',
+            'coupon_discount_total' => 'integer',
             'delivery_fee' => 'integer',
             'grand_total' => 'integer',
         ];

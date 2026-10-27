@@ -3,6 +3,7 @@
 use App\Branding\BrandingServiceProvider;
 use App\Catalog\CatalogServiceProvider;
 use App\Content\ContentServiceProvider;
+use App\Coupons\CouponsServiceProvider;
 use App\Fees\FeesServiceProvider;
 use App\Orders\OrdersServiceProvider;
 use App\Providers\AppServiceProvider;
@@ -23,6 +24,6 @@ return [
     ShippingServiceProvider::class,
     BrandingServiceProvider::class,
     ContentServiceProvider::class,
-    ContentServiceProvider::class,
+    CouponsServiceProvider::class,
     ServiceProvider::class,
 ];

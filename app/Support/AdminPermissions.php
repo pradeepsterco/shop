@@ -70,6 +70,10 @@ class AdminPermissions
 
     public const PAGES_PUBLISH = 'pages.publish';
 
+    public const COUPONS_VIEW = 'coupons.view';
+
+    public const COUPONS_MANAGE = 'coupons.manage';
+
     /**
      * Get all registered permissions grouped by module.
      *
@@ -237,6 +241,16 @@ class AdminPermissions
                 self::PAGES_PUBLISH => [
                     'label' => 'Publish Pages',
                     'description' => 'Publish pages, schedule publication, and rollback versions.',
+                ],
+            ],
+            'Promotions & Coupons' => [
+                self::COUPONS_VIEW => [
+                    'label' => 'View Coupons',
+                    'description' => 'View coupons list, scopes, and redemption statistics.',
+                ],
+                self::COUPONS_MANAGE => [
+                    'label' => 'Manage Coupons',
+                    'description' => 'Create, edit, pause, duplicate, and configure coupon scopes and limits.',
                 ],
             ],
         ];

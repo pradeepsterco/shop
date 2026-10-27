@@ -2,6 +2,10 @@
 
 namespace App\Orders\Services;
 
+use App\Coupons\Contracts\CouponEvaluatorInterface;
+use App\Coupons\Contracts\CouponRedemptionInterface;
+use App\Coupons\DTOs\CartContext;
+use App\Coupons\DTOs\CartLineContext;
 use App\Enums\ListingStatus;
 use App\Enums\ProductImageStatus;
 use App\Enums\ProductQcStatus;
@@ -122,15 +126,65 @@ class OrderService
             $sellerGroups[$sellerId]['mrp_total'] += $lineMrpTotal;
         }
 
-        // 4. Verify live total matches expected total
-        if ($liveTotal !== $data->expectedTotal) {
-            $formattedLive = number_format($liveTotal / 100);
+        // 4. Coupon evaluation & live total verification
+        $couponEval = null;
+        $couponDiscountTotal = 0;
+        $couponCode = null;
+        $couponLineAllocations = [];
+        $couponFundedBy = null;
+
+        if (! empty($data->couponCode)) {
+            $cartLines = [];
+            foreach ($lineQtys as $listingId => $qty) {
+                /** @var Listing $listing */
+                $listing = $listings->get($listingId);
+                $uPrice = (int) $listing->selling_price;
+                $lTotal = $uPrice * $qty;
+                $v = $listing->variant;
+                $p = $v->product;
+                $vert = $p->vertical;
+                $cartLines[] = new CartLineContext(
+                    lineId: $listingId,
+                    sellerId: (int) $listing->seller_profile_id,
+                    productId: (int) $v->product_id,
+                    categoryIds: $vert?->category_id ? [(int) $vert->category_id] : [],
+                    brandId: $p->brand_id,
+                    unitPrice: $uPrice,
+                    quantity: $qty,
+                    lineTotal: $lTotal,
+                );
+            }
+
+            $cartContext = new CartContext(
+                customerReference: (string) $user->id,
+                lines: $cartLines,
+                shippingAmount: 0,
+            );
+
+            /** @var CouponEvaluatorInterface $couponEvaluator */
+            $couponEvaluator = app(CouponEvaluatorInterface::class);
+            $couponEval = $couponEvaluator->evaluate($cartContext, $data->couponCode);
+
+            if (! $couponEval->isValid) {
+                throw new DomainException("Coupon error: {$couponEval->message}");
+            }
+
+            $couponDiscountTotal = $couponEval->totalDiscount;
+            $couponCode = $couponEval->couponCode;
+            $couponLineAllocations = $couponEval->lineAllocations;
+            $couponFundedBy = $couponEval->fundedBy;
+        }
+
+        $deliveryFee = 0;
+        $calculatedPayable = max(100, $liveTotal - $couponDiscountTotal) + $deliveryFee;
+
+        if ($calculatedPayable !== $data->expectedTotal) {
+            $formattedLive = number_format($calculatedPayable / 100);
             throw new DomainException("Price has changed since your checkout session started. Live total is ₹{$formattedLive}. Please review and confirm your order.");
         }
 
         $discountTotal = max(0, $itemsMrpTotal - $liveTotal);
-        $deliveryFee = 0;
-        $grandTotal = $liveTotal + $deliveryFee;
+        $grandTotal = $calculatedPayable;
 
         // 5. Execute transaction: claim order first, lock listings, decrement stock
         $order = DB::transaction(function () use (
@@ -139,6 +193,11 @@ class OrderService
             $address,
             $itemsMrpTotal,
             $discountTotal,
+            $couponCode,
+            $couponDiscountTotal,
+            $couponLineAllocations,
+            $couponFundedBy,
+            $couponEval,
             $deliveryFee,
             $grandTotal,
             $sellerGroups,
@@ -158,6 +217,8 @@ class OrderService
                     'payment_status' => PaymentStatus::Pending,
                     'items_mrp_total' => $itemsMrpTotal,
                     'discount_total' => $discountTotal,
+                    'coupon_code' => $couponCode,
+                    'coupon_discount_total' => $couponDiscountTotal,
                     'delivery_fee' => $deliveryFee,
                     'grand_total' => $grandTotal,
                     'placed_at' => now(),
@@ -194,6 +255,13 @@ class OrderService
                 $sellerMrpTotal = $group['mrp_total'];
                 $sellerDiscount = max(0, $sellerMrpTotal - $sellerSubtotal);
 
+                $sellerCouponDiscount = 0;
+                foreach ($group['items'] as $itemData) {
+                    $sellerCouponDiscount += (int) ($couponLineAllocations[$itemData['listing']->id] ?? 0);
+                }
+
+                $sellerGrandTotal = max(0, $sellerSubtotal - $sellerCouponDiscount);
+
                 $sellerOrder = SellerOrder::create([
                     'order_id' => $order->id,
                     'seller_profile_id' => $seller->id,
@@ -203,7 +271,8 @@ class OrderService
                     'status' => SellerOrderStatus::Placed,
                     'subtotal' => $sellerSubtotal,
                     'discount_total' => $sellerDiscount,
-                    'grand_total' => $sellerSubtotal,
+                    'coupon_discount_total' => $sellerCouponDiscount,
+                    'grand_total' => $sellerGrandTotal,
                     'placed_at' => now(),
                 ]);
 
@@ -236,6 +305,8 @@ class OrderService
                     }
                     $variantTitle = implode(', ', array_filter($labels));
 
+                    $itemCouponDiscount = (int) ($couponLineAllocations[$listing->id] ?? 0);
+
                     OrderItem::create([
                         'seller_order_id' => $sellerOrder->id,
                         'listing_id' => $listing->id,
@@ -250,6 +321,8 @@ class OrderService
                         'mrp' => $mrp,
                         'qty' => $qty,
                         'line_total' => $lineTotal,
+                        'coupon_discount_amount' => $itemCouponDiscount,
+                        'coupon_funded_by' => $couponFundedBy,
                         'hsn_code' => $hsnCode,
                         'gst_rate' => $gstRate,
                         'gst_amount' => $gstAmount,
@@ -266,6 +339,18 @@ class OrderService
                     'reason' => 'Order placed with Cash on Delivery',
                     'created_at' => now(),
                 ]);
+            }
+
+            // Redeem coupon inside the same transaction
+            if ($couponEval && $couponEval->isValid) {
+                /** @var CouponRedemptionInterface $redemptionService */
+                $redemptionService = app(CouponRedemptionInterface::class);
+                $redemptionService->redeem(
+                    evaluation: $couponEval,
+                    customerReference: (string) $user->id,
+                    orderReference: $order->order_number,
+                    idempotencyKey: $data->idempotencyKey,
+                );
             }
 
             return $order;
@@ -424,6 +509,14 @@ class OrderService
                 $actorId,
                 $reason
             );
+
+            // Release coupon allocation if applied
+            if ($sellerOrder->coupon_discount_total > 0) {
+                app(CouponRedemptionInterface::class)->release(
+                    $sellerOrder->order->order_number,
+                    (int) $sellerOrder->coupon_discount_total
+                );
+            }
 
             // Refresh buy boxes for restocked products
             $buyBoxService = app(ProductBuyBoxService::class);

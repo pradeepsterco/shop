@@ -49,6 +49,8 @@ new #[Layout('layouts.storefront')] class extends Component {
 
     public bool $addressIsDefault = false;
 
+    public string $couponInput = '';
+
     public function mount(string $intent): void
     {
         $this->intentId = $intent;
@@ -256,6 +258,49 @@ new #[Layout('layouts.storefront')] class extends Component {
         }
     }
 
+    public function applyCoupon(CheckoutIntentService $service): void
+    {
+        if (! config('coupons.enabled', false)) {
+            session()->flash('coupon_error', 'Coupons are currently disabled.');
+
+            return;
+        }
+
+        $this->couponInput = strtoupper(trim($this->couponInput));
+        if ($this->couponInput === '') {
+            session()->flash('coupon_error', 'Please enter a coupon code.');
+
+            return;
+        }
+
+        $intentModel = $this->intent;
+        if (! $intentModel || $intentModel->isExpired()) {
+            session()->flash('checkout_error', 'This checkout session has expired.');
+
+            return;
+        }
+
+        $evaluation = $service->applyCoupon($intentModel, $this->couponInput);
+        unset($this->intent, $this->evaluation);
+
+        if ($evaluation->isValid) {
+            session()->flash('coupon_success', "Coupon '{$evaluation->couponCode}' applied successfully!");
+            $this->couponInput = '';
+        } else {
+            session()->flash('coupon_error', $evaluation->message ?? 'Invalid coupon code.');
+        }
+    }
+
+    public function removeCoupon(CheckoutIntentService $service): void
+    {
+        $intentModel = $this->intent;
+        if ($intentModel) {
+            $service->removeCoupon($intentModel);
+            unset($this->intent, $this->evaluation);
+            session()->flash('coupon_info', 'Coupon removed.');
+        }
+    }
+
     public function confirmOrder(OrderService $orderService): void
     {
         if (! $this->selectedAddressId || CustomerAddress::where('id', $this->selectedAddressId)->doesntExist()) {
@@ -295,6 +340,7 @@ new #[Layout('layouts.storefront')] class extends Component {
             expectedTotal: (int) ($eval['summary']['payable_total'] ?? 0),
             idempotencyKey: $this->intent->id,
             source: $this->intent->source ?? 'cart',
+            couponCode: $this->intent->coupon_code,
         );
 
         try {
@@ -708,7 +754,83 @@ new #[Layout('layouts.storefront')] class extends Component {
         </div>
 
         <!-- Right: Sticky Price Details -->
-        <div class="lg:col-span-1">
+        <div class="lg:col-span-1 space-y-4">
+            @if (config('coupons.enabled', false))
+            <!-- Coupon / Promo Code Card -->
+            <div class="rounded-2xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-3 flex items-center justify-between">
+                    <span>Apply Coupon</span>
+                    <svg class="h-4 w-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                    </svg>
+                </h3>
+
+                @if ($eval['coupon_revoked'] ?? false)
+                    <div class="mb-3 rounded-xl bg-amber-50 p-3 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                        {{ $eval['coupon_revoked_reason'] }}
+                    </div>
+                @endif
+
+                @if (session()->has('coupon_error'))
+                    <div class="mb-3 rounded-xl bg-red-50 p-3 text-xs text-red-700 dark:bg-red-950/40 dark:text-red-300 border border-red-200 dark:border-red-900/50">
+                        {{ session('coupon_error') }}
+                    </div>
+                @endif
+
+                @if (session()->has('coupon_success'))
+                    <div class="mb-3 rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                        {{ session('coupon_success') }}
+                    </div>
+                @endif
+
+                @if (session()->has('coupon_info'))
+                    <div class="mb-3 rounded-xl bg-zinc-100 p-3 text-xs text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                        {{ session('coupon_info') }}
+                    </div>
+                @endif
+
+                @if (! empty($summary['coupon']))
+                    <div class="flex items-center justify-between rounded-xl bg-emerald-50/60 p-3 border border-emerald-200 dark:border-emerald-800/60 dark:bg-emerald-950/20">
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <span class="font-mono text-xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/50 px-2 py-0.5 rounded">
+                                    {{ $summary['coupon']['code'] }}
+                                </span>
+                                <span class="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                                    −₹{{ number_format($summary['coupon']['discount'] / 100) }}
+                                </span>
+                            </div>
+                            <p class="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1">Applied</p>
+                        </div>
+                        <button
+                            type="button"
+                            wire:click="removeCoupon"
+                            class="text-xs font-semibold text-red-600 hover:text-red-700 dark:text-red-400 hover:underline cursor-pointer"
+                        >
+                            Remove
+                        </button>
+                    </div>
+                @else
+                    <form wire:submit.prevent="applyCoupon" class="flex gap-2">
+                        <input
+                            type="text"
+                            wire:model="couponInput"
+                            placeholder="Enter coupon code"
+                            class="flex-1 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs uppercase tracking-wider text-zinc-900 placeholder-zinc-400 focus:border-emerald-500 focus:bg-white focus:outline-none dark:border-zinc-800 dark:bg-zinc-800 dark:text-white dark:placeholder-zinc-500"
+                        />
+                        <button
+                            type="submit"
+                            wire:loading.attr="disabled"
+                            class="rounded-xl bg-zinc-900 px-4 py-2 text-xs font-bold uppercase tracking-wider text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white transition cursor-pointer"
+                        >
+                            Apply
+                        </button>
+                    </form>
+                @endif
+            </div>
+            @endif
+
+            <!-- Sticky Price Details -->
             <div class="sticky top-20 rounded-2xl border border-zinc-200 bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-5">
                 <h2 class="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 border-b border-zinc-100 dark:border-zinc-800 pb-3">
                     Price Details
@@ -721,9 +843,16 @@ new #[Layout('layouts.storefront')] class extends Component {
                     </div>
 
                     <div class="flex justify-between text-emerald-600 dark:text-emerald-400">
-                        <span>Discount</span>
+                        <span>Catalog Savings</span>
                         <span>−₹{{ number_format(($summary['discount_total'] ?? 0) / 100) }}</span>
                     </div>
+
+                    @if (($summary['coupon_discount'] ?? 0) > 0)
+                        <div class="flex justify-between text-emerald-600 dark:text-emerald-400 font-medium">
+                            <span>Coupon Discount ({{ $summary['coupon']['code'] ?? '' }})</span>
+                            <span>−₹{{ number_format($summary['coupon_discount'] / 100) }}</span>
+                        </div>
+                    @endif
 
                     <div class="flex justify-between text-zinc-700 dark:text-zinc-300">
                         <span>Delivery Charges</span>

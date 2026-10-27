@@ -3,6 +3,10 @@
 namespace App\Checkout\Services;
 
 use App\Checkout\Models\CheckoutIntent;
+use App\Coupons\Contracts\CouponEvaluatorInterface;
+use App\Coupons\DTOs\CartContext;
+use App\Coupons\DTOs\CartLineContext;
+use App\Coupons\DTOs\CouponEvaluation;
 use App\Enums\ListingStatus;
 use App\Enums\ProductImageStatus;
 use App\Enums\ProductQcStatus;
@@ -158,7 +162,7 @@ class CheckoutIntentService
         $lines = $intent->lines ?? [];
         $listingIds = array_filter(array_map(fn ($l) => (int) ($l['listing_id'] ?? 0), $lines));
 
-        $liveListings = Listing::with(['variant.product.images', 'sellerProfile'])
+        $liveListings = Listing::with(['variant.product.images', 'variant.product.vertical', 'sellerProfile'])
             ->whereIn('id', $listingIds)
             ->get()
             ->keyBy('id');
@@ -217,6 +221,9 @@ class CheckoutIntentService
                 'image' => $line['image'] ?? null,
                 'seller_profile_id' => $listing->seller_profile_id,
                 'seller_name' => $line['seller_name'] ?? $listing->sellerProfile->store_name,
+                'product_id' => $listing->variant->product_id,
+                'brand_id' => $listing->variant->product->brand_id,
+                'category_ids' => $listing->variant->product->vertical?->category_id ? [(int) $listing->variant->product->vertical->category_id] : [],
                 'unit_price' => $livePrice,
                 'mrp' => $liveMrp,
                 'qty' => $effectiveQty,
@@ -233,23 +240,126 @@ class CheckoutIntentService
 
         $discountTotal = max(0, $mrpTotal - $sellingTotal);
         $deliveryCharge = 0; // Free for now
-        $payableTotal = $sellingTotal + $deliveryCharge;
+        $couponDiscount = 0;
+        $couponInfo = null;
+        $couponRevoked = false;
+        $couponRevokedReason = null;
+
+        // Evaluate applied coupon if present
+        if (! empty($intent->coupon_code) && ! empty($activeLines)) {
+            $cartLines = [];
+            foreach ($activeLines as $al) {
+                $cartLines[] = new CartLineContext(
+                    lineId: $al['listing_id'],
+                    sellerId: (int) $al['seller_profile_id'],
+                    productId: (int) $al['product_id'],
+                    categoryIds: $al['category_ids'],
+                    brandId: $al['brand_id'],
+                    unitPrice: (int) $al['unit_price'],
+                    quantity: (int) $al['qty'],
+                    lineTotal: (int) $al['subtotal'],
+                );
+            }
+
+            $cartContext = new CartContext(
+                customerReference: (string) $intent->user_id,
+                lines: $cartLines,
+                shippingAmount: $deliveryCharge,
+            );
+
+            /** @var CouponEvaluatorInterface $evaluator */
+            $evaluator = app(CouponEvaluatorInterface::class);
+            $couponEvaluation = $evaluator->evaluate($cartContext, $intent->coupon_code);
+
+            if ($couponEvaluation->isValid) {
+                $couponDiscount = $couponEvaluation->totalDiscount;
+                $couponInfo = [
+                    'code' => $couponEvaluation->couponCode,
+                    'discount' => $couponDiscount,
+                    'funded_by' => $couponEvaluation->fundedBy,
+                    'line_allocations' => $couponEvaluation->lineAllocations,
+                    'message' => $couponEvaluation->message,
+                ];
+            } else {
+                // Invalidate & revoke coupon when cart changes make it invalid
+                $couponRevoked = true;
+                $couponRevokedReason = "Coupon '{$intent->coupon_code}' was removed: {$couponEvaluation->message}";
+                $intent->update(['coupon_code' => null]);
+            }
+        }
+
+        $payableTotal = max(100, $sellingTotal - $couponDiscount) + $deliveryCharge;
 
         return [
             'is_expired' => $intent->isExpired(),
             'active_lines' => $activeLines,
             'unavailable_lines' => $unavailableLines,
             'price_changes' => $priceChanges,
+            'coupon_revoked' => $couponRevoked,
+            'coupon_revoked_reason' => $couponRevokedReason,
             'summary' => [
                 'items_count' => $itemsCount,
                 'mrp_total' => $mrpTotal,
                 'selling_total' => $sellingTotal,
                 'discount_total' => $discountTotal,
+                'coupon_discount' => $couponDiscount,
+                'coupon' => $couponInfo,
                 'delivery_charge' => $deliveryCharge,
                 'payable_total' => $payableTotal,
-                'savings' => $discountTotal,
+                'savings' => $discountTotal + $couponDiscount,
             ],
         ];
+    }
+
+    /**
+     * Apply a coupon code to the checkout intent.
+     */
+    public function applyCoupon(CheckoutIntent $intent, string $code): CouponEvaluation
+    {
+        $eval = $this->evaluateIntent($intent);
+        $activeLines = $eval['active_lines'] ?? [];
+
+        if (empty($activeLines)) {
+            return CouponEvaluation::invalid('EMPTY_CART', 'Cannot apply a coupon to an empty cart.');
+        }
+
+        $cartLines = [];
+        foreach ($activeLines as $al) {
+            $cartLines[] = new CartLineContext(
+                lineId: $al['listing_id'],
+                sellerId: (int) $al['seller_profile_id'],
+                productId: (int) ($al['product_id'] ?? 0),
+                categoryIds: $al['category_ids'] ?? [],
+                brandId: $al['brand_id'] ?? null,
+                unitPrice: (int) $al['unit_price'],
+                quantity: (int) $al['qty'],
+                lineTotal: (int) $al['subtotal'],
+            );
+        }
+
+        $cartContext = new CartContext(
+            customerReference: (string) $intent->user_id,
+            lines: $cartLines,
+            shippingAmount: (int) ($eval['summary']['delivery_charge'] ?? 0),
+        );
+
+        /** @var CouponEvaluatorInterface $evaluator */
+        $evaluator = app(CouponEvaluatorInterface::class);
+        $evaluation = $evaluator->evaluate($cartContext, $code);
+
+        if ($evaluation->isValid) {
+            $intent->update(['coupon_code' => $evaluation->couponCode]);
+        }
+
+        return $evaluation;
+    }
+
+    /**
+     * Remove applied coupon code from checkout intent.
+     */
+    public function removeCoupon(CheckoutIntent $intent): void
+    {
+        $intent->update(['coupon_code' => null]);
     }
 
     /**

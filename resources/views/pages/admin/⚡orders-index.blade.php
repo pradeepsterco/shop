@@ -486,6 +486,11 @@ new #[Layout('layouts.admin')] #[Title('Orders Management')] class extends Compo
                                 </td>
                                 <td class="py-3 px-4 font-bold text-zinc-900 dark:text-white">
                                     ₹{{ number_format($order->grand_total / 100) }}
+                                    @if (($order->coupon_discount_total ?? 0) > 0)
+                                        <span class="block text-[10px] font-normal text-emerald-600 dark:text-emerald-400">
+                                            Coupon: −₹{{ number_format($order->coupon_discount_total / 100) }}
+                                        </span>
+                                    @endif
                                 </td>
                                 <td class="py-3 px-4 text-zinc-600 dark:text-zinc-400">
                                     <div>{{ $order->payment_method->label() }}</div>

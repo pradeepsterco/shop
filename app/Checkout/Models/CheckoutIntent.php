@@ -32,6 +32,7 @@ class CheckoutIntent extends Model
         'source',
         'lines',
         'status',
+        'coupon_code',
         'expires_at',
     ];
 

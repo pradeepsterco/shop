@@ -135,6 +135,11 @@ new #[Layout('layouts.seller')] #[Title('Orders')] class extends Component {
                                 </td>
                                 <td class="py-3 px-4 font-bold text-zinc-900 dark:text-white">
                                     ₹{{ number_format($sellerOrder->grand_total / 100) }}
+                                    @if (($sellerOrder->coupon_discount_total ?? 0) > 0)
+                                        <span class="block text-[10px] font-normal text-emerald-600 dark:text-emerald-400">
+                                            Platform promo: −₹{{ number_format($sellerOrder->coupon_discount_total / 100) }}
+                                        </span>
+                                    @endif
                                 </td>
                                 <td class="py-3 px-4">
                                     <span class="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase {{ $sellerOrder->status->value === 'cancelled' ? 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300' : ($sellerOrder->status->value === 'delivered' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' : 'bg-amber-50 text-amber-800 dark:bg-amber-950/50 dark:text-amber-200') }}">

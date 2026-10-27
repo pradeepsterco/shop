@@ -15,5 +15,6 @@ readonly class PlaceOrderData
         public int $expectedTotal,
         public string $idempotencyKey,
         public string $source = 'cart',
+        public ?string $couponCode = null,
     ) {}
 }

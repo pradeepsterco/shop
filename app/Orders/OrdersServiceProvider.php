@@ -2,6 +2,8 @@
 
 namespace App\Orders;
 
+use App\Coupons\Contracts\CustomerEligibilityInterface;
+use App\Orders\Adapters\OrderCustomerEligibilityAdapter;
 use App\Orders\Contracts\OrderItemsFeeLookupInterface;
 use App\Orders\Contracts\SellerOrderFulfillmentInterface;
 use App\Orders\Contracts\SellerOrderShippingDetailsLookupInterface;
@@ -24,6 +26,7 @@ class OrdersServiceProvider extends ServiceProvider
         SellerOrderStatusLookupInterface::class => SellerOrderStatusLookupService::class,
         SellerOrderFulfillmentInterface::class => SellerOrderFulfillmentService::class,
         SellerOrderShippingDetailsLookupInterface::class => SellerOrderShippingDetailsLookupService::class,
+        CustomerEligibilityInterface::class => OrderCustomerEligibilityAdapter::class,
     ];
 
     public function register(): void

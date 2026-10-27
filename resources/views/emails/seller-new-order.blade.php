@@ -41,14 +41,34 @@
                             </td>
                             <td style="padding: 8px 0; text-align: right; color: #18181b; font-weight: bold;">
                                 ₹{{ number_format($item->line_total / 100) }}
+                                @if (($item->coupon_discount_amount ?? 0) > 0)
+                                    <div style="font-size: 10px; color: #16a34a; font-weight: normal;">
+                                        Promo: −₹{{ number_format($item->coupon_discount_amount / 100) }}
+                                    </div>
+                                @endif
                             </td>
                         </tr>
                     @endforeach
                 </tbody>
             </table>
 
-            <p style="margin: 0; font-size: 13px; color: #52525b;">Package Order Value: <strong>₹{{ number_format($sellerOrder->grand_total / 100) }}</strong></p>
-            <p style="margin: 4px 0 0 0; font-size: 13px; color: #52525b;">Items Count: {{ $sellerOrder->items->count() }} ({{ $sellerOrder->items->sum('qty') }} units)</p>
+            <div style="border-top: 1px solid #e4e4e7; padding-top: 10px; font-size: 13px; line-height: 1.6; color: #52525b;">
+                <div style="display: flex; justify-content: space-between;">
+                    <span>Gross Items Total:</span>
+                    <span style="float: right;">₹{{ number_format(($sellerOrder->subtotal ?? $sellerOrder->grand_total) / 100) }}</span>
+                </div>
+                @if (($sellerOrder->coupon_discount_total ?? 0) > 0)
+                    <div style="display: flex; justify-content: space-between; color: #16a34a;">
+                        <span>Platform Promotion (not deducted from payout):</span>
+                        <span style="float: right;">−₹{{ number_format($sellerOrder->coupon_discount_total / 100) }}</span>
+                    </div>
+                @endif
+                <div style="border-top: 1px dashed #d4d4d8; margin-top: 6px; padding-top: 6px; font-weight: bold; color: #18181b;">
+                    <span>Customer Net Payable:</span>
+                    <span style="float: right;">₹{{ number_format($sellerOrder->grand_total / 100) }}</span>
+                </div>
+            </div>
+            <p style="margin: 8px 0 0 0; font-size: 12px; color: #71717a;">Items Count: {{ $sellerOrder->items->count() }} ({{ $sellerOrder->items->sum('qty') }} units)</p>
         </div>
 
         <a href="{{ $viewUrl }}" style="display: inline-block; background-color: #2563eb; color: #ffffff; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-size: 13px; font-weight: bold;">

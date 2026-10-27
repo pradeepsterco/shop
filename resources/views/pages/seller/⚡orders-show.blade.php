@@ -621,6 +621,18 @@ new #[Layout('layouts.seller')] #[Title('Order Details')] class extends Componen
                                 <p class="text-sm font-extrabold text-zinc-900 dark:text-white mt-0.5">
                                     ₹{{ number_format($item->line_total / 100) }}
                                 </p>
+                                @if (($item->coupon_discount_amount ?? 0) > 0)
+                                    <div class="mt-1 text-[11px] text-emerald-600 dark:text-emerald-400">
+                                        @if ($item->coupon_funded_by === 'platform')
+                                            <span class="inline-flex flex-col items-end">
+                                                <span class="font-medium">Platform promotion: −₹{{ number_format($item->coupon_discount_amount / 100) }}</span>
+                                                <span class="text-[10px] text-zinc-400 dark:text-zinc-500">(not deducted from your payout)</span>
+                                            </span>
+                                        @else
+                                            <span>Seller concession: −₹{{ number_format($item->coupon_discount_amount / 100) }}</span>
+                                        @endif
+                                    </div>
+                                @endif
                             </div>
                         </div>
 
@@ -780,7 +792,21 @@ new #[Layout('layouts.seller')] #[Title('Order Details')] class extends Componen
                 @endif
 
                 <div class="flex items-baseline justify-between">
-                    <span class="text-xs text-zinc-600 dark:text-zinc-400">Gross Package Value</span>
+                    <span class="text-xs text-zinc-600 dark:text-zinc-400">Gross Items Total</span>
+                    <span class="text-sm font-bold text-zinc-900 dark:text-white">
+                        ₹{{ number_format(($sellerOrder->subtotal ?? $sellerOrder->grand_total) / 100, 2) }}
+                    </span>
+                </div>
+
+                @if (($sellerOrder->coupon_discount_total ?? 0) > 0)
+                    <div class="flex items-baseline justify-between text-xs text-emerald-600 dark:text-emerald-400">
+                        <span>Platform Promotion <span class="text-[10px] text-zinc-400">(not deducted)</span></span>
+                        <span>−₹{{ number_format($sellerOrder->coupon_discount_total / 100, 2) }}</span>
+                    </div>
+                @endif
+
+                <div class="flex items-baseline justify-between border-t border-zinc-100 dark:border-zinc-800 pt-2">
+                    <span class="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Customer Net Payable</span>
                     <span class="text-lg font-bold text-zinc-900 dark:text-white">
                         ₹{{ number_format($sellerOrder->grand_total / 100, 2) }}
                     </span>

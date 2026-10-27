@@ -50,6 +50,8 @@ class OrderItem extends Model
         'mrp',
         'qty',
         'line_total',
+        'coupon_discount_amount',
+        'coupon_funded_by',
         'hsn_code',
         'gst_rate',
         'gst_amount',
@@ -65,6 +67,7 @@ class OrderItem extends Model
             'mrp' => 'integer',
             'qty' => 'integer',
             'line_total' => 'integer',
+            'coupon_discount_amount' => 'integer',
             'gst_rate' => 'float',
             'gst_amount' => 'integer',
         ];

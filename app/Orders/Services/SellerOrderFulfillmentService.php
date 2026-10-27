@@ -2,6 +2,7 @@
 
 namespace App\Orders\Services;
 
+use App\Coupons\Contracts\CouponRedemptionInterface;
 use App\Orders\Contracts\SellerOrderFulfillmentInterface;
 use App\Orders\DTOs\SellerOrderInvoiceDto;
 use App\Orders\Enums\SellerOrderStatus;
@@ -172,6 +173,13 @@ class SellerOrderFulfillmentService implements SellerOrderFulfillmentInterface
             actorId: 0,
             reason: $reason ?? 'Carrier marked shipment as Returned to Origin (RTO)',
         );
+
+        if ($sellerOrder->coupon_discount_total > 0 && config('coupons.restore_usage_on_rto', false)) {
+            app(CouponRedemptionInterface::class)->release(
+                $sellerOrder->order->order_number,
+                (int) $sellerOrder->coupon_discount_total
+            );
+        }
     }
 
     public function revertToPacked(
