@@ -66,11 +66,17 @@ readonly class BrandingData
 
         $url = Storage::disk('public')->url($resolvedPath);
 
-        if ($absolute && ! str_starts_with($url, 'http://') && ! str_starts_with($url, 'https://')) {
-            $url = url($url);
+        if ($absolute) {
+            if (! str_starts_with($url, 'http://') && ! str_starts_with($url, 'https://')) {
+                $url = url($url);
+            }
+
+            return $url;
         }
 
-        return $url;
+        $path = parse_url($url, PHP_URL_PATH);
+
+        return $path ?: $url;
     }
 
     /**
@@ -79,7 +85,10 @@ readonly class BrandingData
     public function faviconUrl(): string
     {
         if (filled($this->faviconPath)) {
-            return Storage::disk('public')->url($this->faviconPath);
+            $url = Storage::disk('public')->url($this->faviconPath);
+            $path = parse_url($url, PHP_URL_PATH);
+
+            return $path ?: $url;
         }
 
         return '/favicon.ico';

@@ -4,6 +4,7 @@ namespace App\Livewire\Seller;
 
 use App\Orders\Enums\SellerOrderStatus;
 use App\Orders\Models\SellerOrder;
+use App\Returns\Models\ReturnRequest;
 use Illuminate\Database\Eloquent\Builder;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
@@ -38,7 +39,9 @@ new #[Layout('layouts.seller')] #[Title('Orders')] class extends Component {
 
         return SellerOrder::with(['order', 'items'])
             ->where('seller_profile_id', $sellerId)
-            ->when($this->status !== 'all', function (Builder $q) {
+            // "returns": packages with customer returns (read-only for the seller; condition report on the order page)
+            ->when($this->status === 'returns', fn (Builder $q) => $q->whereIn('id', ReturnRequest::select('seller_order_id')))
+            ->when(! in_array($this->status, ['all', 'returns'], true), function (Builder $q) {
                 $q->where('status', $this->status);
             })
             ->when(filled($this->search), function (Builder $q) {
@@ -78,6 +81,7 @@ new #[Layout('layouts.seller')] #[Title('Orders')] class extends Component {
                     'shipped' => 'Shipped',
                     'delivered' => 'Delivered',
                     'cancelled' => 'Cancelled',
+                    'returns' => 'Returns',
                 ];
             @endphp
             @foreach ($tabs as $key => $label)
@@ -144,6 +148,12 @@ new #[Layout('layouts.seller')] #[Title('Orders')] class extends Component {
                                 <td class="py-3 px-4">
                                     <span class="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase {{ $sellerOrder->status->value === 'cancelled' ? 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300' : ($sellerOrder->status->value === 'delivered' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' : 'bg-amber-50 text-amber-800 dark:bg-amber-950/50 dark:text-amber-200') }}">
                                         {{ $sellerOrder->status->label() }}
+                                    </span>
+                                    @php $openReturn = ReturnRequest::where('seller_order_id', $sellerOrder->id)->whereIn('status', \App\Returns\Enums\ReturnRequestStatus::activeValues())->first(); @endphp
+                                    @if ($openReturn)
+                                        <span data-test="open-return-badge" class="ml-1 inline-flex rounded-md bg-indigo-50 px-2 py-0.5 text-[11px] font-bold text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300">Return: {{ $openReturn->status->label() }}</span>
+                                    @endif
+                                    <span class="hidden">
                                     </span>
                                 </td>
                                 <td class="py-3 px-4 text-right">

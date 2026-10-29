@@ -6,6 +6,8 @@ use App\Shipping\Contracts\ShipmentLookupInterface;
 use App\Shipping\DTOs\SellerShippingProfileDto;
 use App\Shipping\DTOs\ShipmentEventDto;
 use App\Shipping\DTOs\ShipmentSummaryDto;
+use App\Shipping\Enums\ShipmentDirection;
+use App\Shipping\Enums\ShipmentPurpose;
 use App\Shipping\Models\SellerShippingProfile;
 use App\Shipping\Models\Shipment;
 
@@ -13,20 +15,15 @@ class ShipmentLookupService implements ShipmentLookupInterface
 {
     public function getShipmentForSellerOrder(string $sellerOrderId): ?ShipmentSummaryDto
     {
-        /** @var Shipment|null $shipment */
-        $shipment = Shipment::with('events')
+        // The package's own delivery: original forward shipments only (reships and return pickups are separate)
+        $original = fn () => Shipment::with(['events', 'items'])
             ->where('seller_order_id', $sellerOrderId)
-            ->where('status', '!=', 'cancelled')
-            ->latest()
-            ->first();
+            ->where('direction', ShipmentDirection::Forward->value)
+            ->where('purpose', ShipmentPurpose::Original->value);
 
-        if (! $shipment) {
-            /** @var Shipment|null $shipment */
-            $shipment = Shipment::with('events')
-                ->where('seller_order_id', $sellerOrderId)
-                ->latest()
-                ->first();
-        }
+        /** @var Shipment|null $shipment */
+        $shipment = $original()->where('status', '!=', 'cancelled')->latest()->first()
+            ?? $original()->latest()->first();
 
         if (! $shipment) {
             return null;
@@ -35,10 +32,21 @@ class ShipmentLookupService implements ShipmentLookupInterface
         return $this->toDto($shipment);
     }
 
+    public function getShipmentsForSellerOrder(string $sellerOrderId, ?ShipmentDirection $direction = null): array
+    {
+        $shipments = Shipment::with(['events', 'items'])
+            ->where('seller_order_id', $sellerOrderId)
+            ->when($direction, fn ($q) => $q->where('direction', $direction->value))
+            ->oldest()
+            ->get();
+
+        return array_values($shipments->map(fn (Shipment $shipment) => $this->toDto($shipment))->all());
+    }
+
     public function getShipmentById(string $shipmentId): ?ShipmentSummaryDto
     {
         /** @var Shipment|null $shipment */
-        $shipment = Shipment::with('events')->find($shipmentId);
+        $shipment = Shipment::with(['events', 'items'])->find($shipmentId);
 
         if (! $shipment) {
             return null;
@@ -114,7 +122,17 @@ class ShipmentLookupService implements ShipmentLookupInterface
             pickedUpAt: $shipment->picked_up_at,
             deliveredAt: $shipment->delivered_at,
             cancelledAt: $shipment->cancelled_at,
+            ndrAttemptCount: (int) ($shipment->ndr_attempt_count ?? 0),
+            latestNdrReason: $shipment->latest_ndr_reason,
+            ndrUpdatedPhone: $shipment->ndr_updated_phone,
+            ndrUpdatedAddress: $shipment->ndr_updated_address,
+            ndrAction: $shipment->ndr_action,
+            partialDeliveryData: $shipment->partial_delivery_data,
             events: $events,
+            direction: $shipment->direction,
+            purpose: $shipment->purpose,
+            parentShipmentId: $shipment->parent_shipment_id,
+            items: $shipment->items->mapWithKeys(fn ($item) => [(int) $item->order_item_id => (int) $item->qty])->all(),
         );
     }
 }

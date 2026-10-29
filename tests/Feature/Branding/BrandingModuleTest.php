@@ -4,12 +4,14 @@ use App\Branding\Contracts\BrandingLookupInterface;
 use App\Branding\DTOs\BrandingData;
 use App\Branding\Services\BrandingService;
 use App\Mail\CustomerWelcomeMail;
+use App\Mail\StaffInvitationMail;
 use App\Models\Admin;
 use App\Models\AdminActivityLog;
 use App\Models\SellerProfile;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
@@ -299,4 +301,56 @@ test('branding service gracefully handles corrupted or non-array cache data with
 
     // And verify the cache was self-healed to an array
     expect(Cache::get(BrandingService::CACHE_KEY))->toBeArray();
+});
+
+test('email templates use absolute logo URLs with APP_URL while web pages use root-relative paths', function () {
+    Storage::fake('public');
+
+    /** @var BrandingService $service */
+    $service = app(BrandingService::class);
+
+    $file = UploadedFile::fake()->image('logo.png', 120, 40);
+    $service->uploadLogo('default_logo_light', $file);
+
+    // 1. Web URLs are root-relative (no http/https prefix)
+    $webUrl = brand_logo_url('storefront', dark: false, absolute: false);
+    expect($webUrl)->toStartWith('/storage/')
+        ->and($webUrl)->not->toMatch('/^https?:\/\//i');
+
+    $sellerWebUrl = brand_logo_url('seller', dark: false, absolute: false);
+    expect($sellerWebUrl)->toStartWith('/storage/')
+        ->and($sellerWebUrl)->not->toMatch('/^https?:\/\//i');
+
+    // 2. Email logo URLs are absolute (starts with http:// or https://)
+    $emailUrl = brand_logo_url('email', dark: false, absolute: true);
+    expect($emailUrl)->toMatch('/^https?:\/\//i')
+        ->and($emailUrl)->toContain('/storage/');
+
+    // 3. Rendered Blade component <x-brand.logo area="email" isEmail="true" /> produces absolute src
+    $renderedEmail = Blade::render('<x-brand.logo area="email" :isEmail="true" />');
+    expect($renderedEmail)->toMatch('/src=["\']https?:\/\/[^"\']+["\']/i');
+
+    // 4. Rendered Blade component <x-brand.logo area="seller" /> produces root-relative src
+    $renderedWeb = Blade::render('<x-brand.logo area="seller" />');
+    expect($renderedWeb)->toMatch('/src=["\']\/storage\/[^"\']+["\']/i')
+        ->and($renderedWeb)->not->toMatch('/src=["\']https?:\/\//i');
+});
+
+test('rendered emails use an absolute http(s) logo src', function () {
+    Storage::fake('public');
+    app(BrandingService::class)->uploadLogo('email_logo_light', UploadedFile::fake()->image('email-logo.png', 200, 50));
+
+    $mails = [
+        new CustomerWelcomeMail(User::factory()->create(), 'token-1'),
+        new StaffInvitationMail(Admin::factory()->create(), 'token-2'),
+    ];
+
+    foreach ($mails as $mail) {
+        preg_match_all('/<img[^>]+src="([^"]+)"/i', $mail->render(), $matches);
+
+        expect($matches[1])->not->toBeEmpty();
+        foreach ($matches[1] as $src) {
+            expect($src)->toMatch('/^https?:\/\//i');
+        }
+    }
 });

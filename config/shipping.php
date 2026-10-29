@@ -27,6 +27,17 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Fake Carrier Simulation
+    |--------------------------------------------------------------------------
+    | When enabled, allows admin to advance shipments through simulated statuses.
+    | Defaults to false in production/normal environments; enable locally via .env.
+    |
+    */
+
+    'fake_simulation_enabled' => (bool) env('SHIPPING_FAKE_SIMULATION_ENABLED', false),
+
+    /*
+    |--------------------------------------------------------------------------
     | Serviceability Cache TTL
     |--------------------------------------------------------------------------
     |
@@ -83,6 +94,8 @@ return [
 
     'ekart' => [
         'base_url' => env('EKART_BASE_URL', 'https://app.elite.ekartlogistics.in'),
+        // Reverse pickups with quality check (qc_shipment) need enablement on the Ekart account
+        'reverse_qc' => (bool) env('EKART_REVERSE_QC', false),
         'client_id' => env('EKART_CLIENT_ID', ''),
         'username' => env('EKART_USERNAME', ''),
         'password' => env('EKART_PASSWORD', ''),
@@ -108,6 +121,8 @@ return [
         'email' => env('SHIPROCKET_EMAIL', ''),
         'password' => env('SHIPROCKET_PASSWORD', ''),
         'webhook_token' => env('SHIPROCKET_WEBHOOK_TOKEN', ''),
+        // Return orders require a pickup_email: the customer's account email is used; this contact only when it is missing
+        'return_contact_email' => env('SHIPROCKET_RETURN_CONTACT_EMAIL', env('MAIL_FROM_ADDRESS', 'support@example.com')),
         'courier_selection_rule' => env('SHIPROCKET_COURIER_SELECTION', 'recommended'), // 'recommended', 'cheapest', 'fastest', 'specific'
         'specific_courier_id' => env('SHIPROCKET_SPECIFIC_COURIER_ID', null),
         'timeout_seconds' => (int) env('SHIPROCKET_TIMEOUT_SECONDS', 15),

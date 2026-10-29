@@ -8,6 +8,7 @@ use App\Fees\FeesServiceProvider;
 use App\Orders\OrdersServiceProvider;
 use App\Providers\AppServiceProvider;
 use App\Providers\FortifyServiceProvider;
+use App\Returns\ReturnsServiceProvider;
 use App\Sellers\SellersServiceProvider;
 use App\Settlements\SettlementsServiceProvider;
 use App\Shipping\ShippingServiceProvider;
@@ -22,6 +23,7 @@ return [
     SellersServiceProvider::class,
     SettlementsServiceProvider::class,
     ShippingServiceProvider::class,
+    ReturnsServiceProvider::class,
     BrandingServiceProvider::class,
     ContentServiceProvider::class,
     CouponsServiceProvider::class,

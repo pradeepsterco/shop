@@ -5,7 +5,10 @@ namespace App\Orders\Services;
 use App\Coupons\Contracts\CouponRedemptionInterface;
 use App\Orders\Contracts\SellerOrderFulfillmentInterface;
 use App\Orders\DTOs\SellerOrderInvoiceDto;
+use App\Orders\Enums\PaymentMethod;
 use App\Orders\Enums\SellerOrderStatus;
+use App\Orders\Events\SellerOrderPartialDelivered;
+use App\Orders\Models\CustomerRefundItem;
 use App\Orders\Models\OrderStatusHistory;
 use App\Orders\Models\SellerInvoiceSequence;
 use App\Orders\Models\SellerOrder;
@@ -174,12 +177,165 @@ class SellerOrderFulfillmentService implements SellerOrderFulfillmentInterface
             reason: $reason ?? 'Carrier marked shipment as Returned to Origin (RTO)',
         );
 
+        $this->restoreCouponUsageIfConfigured($sellerOrder);
+    }
+
+    /**
+     * RTO and lost packages never reached the customer; both follow the same coupon-restore switch.
+     */
+    protected function restoreCouponUsageIfConfigured(SellerOrder $sellerOrder): void
+    {
         if ($sellerOrder->coupon_discount_total > 0 && config('coupons.restore_usage_on_rto', false)) {
             app(CouponRedemptionInterface::class)->release(
                 $sellerOrder->order->order_number,
                 (int) $sellerOrder->coupon_discount_total
             );
         }
+    }
+
+    public function markLostInTransit(
+        string $sellerOrderId,
+        ?string $reason = null,
+    ): void {
+        /** @var SellerOrder $sellerOrder */
+        $sellerOrder = SellerOrder::findOrFail($sellerOrderId);
+
+        if ($sellerOrder->status === SellerOrderStatus::LostInTransit) {
+            return;
+        }
+
+        if ($sellerOrder->status !== SellerOrderStatus::Shipped) {
+            throw new DomainException("Only a shipped order can be marked lost in transit (current status: {$sellerOrder->status->label()}).");
+        }
+
+        $this->orderService->transitionSellerOrderStatus(
+            sellerOrder: $sellerOrder,
+            newStatus: SellerOrderStatus::LostInTransit,
+            actorType: 'returns_service',
+            actorId: 0,
+            reason: $reason ?? 'Shipment lost in transit by courier',
+        );
+
+        $this->restoreCouponUsageIfConfigured($sellerOrder);
+    }
+
+    public function confirmPartialDelivery(
+        string $sellerOrderId,
+        array $deliveredItemIds,
+        array $undeliveredItemIds,
+    ): array {
+        /** @var SellerOrder $sellerOrder */
+        $sellerOrder = SellerOrder::with(['items', 'order'])->findOrFail($sellerOrderId);
+
+        if ($sellerOrder->status !== SellerOrderStatus::Shipped) {
+            throw new DomainException("Only a shipped order can be confirmed as partially delivered (current status: {$sellerOrder->status->label()}).");
+        }
+
+        $delivered = array_values(array_unique(array_map('intval', $deliveredItemIds)));
+        $undelivered = array_values(array_unique(array_map('intval', $undeliveredItemIds)));
+        $orderItemIds = $sellerOrder->items->pluck('id')->map(fn ($id) => (int) $id)->sort()->values()->all();
+        $submitted = array_merge($delivered, $undelivered);
+        sort($submitted);
+
+        if (array_intersect($delivered, $undelivered) !== [] || $submitted !== $orderItemIds) {
+            throw new DomainException('Every item of the order must be marked either delivered or not delivered, exactly once.');
+        }
+
+        if ($delivered === []) {
+            throw new DomainException('No items were delivered; this is not a partial delivery.');
+        }
+
+        if ($undelivered === []) {
+            $this->markDelivered($sellerOrderId);
+
+            return [];
+        }
+
+        // COD is collected only for the delivered items, net of their coupon discount
+        $expectedCod = match ($sellerOrder->order->payment_method) {
+            PaymentMethod::CashOnDelivery => (int) $sellerOrder->items
+                ->whereIn('id', $delivered)
+                ->sum(fn ($item) => max(0, (int) $item->line_total - (int) $item->coupon_discount_amount)),
+        };
+
+        $sellerOrder->update(['expected_cod_amount_paise' => $expectedCod]);
+
+        $this->orderService->transitionSellerOrderStatus(
+            sellerOrder: $sellerOrder,
+            newStatus: SellerOrderStatus::PartiallyDelivered,
+            actorType: 'returns_service',
+            actorId: 0,
+            reason: count($delivered).' item(s) delivered, '.count($undelivered).' not delivered',
+        );
+
+        // Whole lines are undelivered: every unit of each line
+        return $sellerOrder->items
+            ->whereIn('id', $undelivered)
+            ->mapWithKeys(fn ($item) => [(int) $item->id => ['units' => (int) $item->qty, 'line_qty' => (int) $item->qty]])
+            ->all();
+    }
+
+    public function recordReturnRefund(string $sellerOrderId): void
+    {
+        DB::transaction(function () use ($sellerOrderId) {
+            /** @var SellerOrder $sellerOrder */
+            $sellerOrder = SellerOrder::with('items')->lockForUpdate()->findOrFail($sellerOrderId);
+
+            $allowed = [SellerOrderStatus::Delivered, SellerOrderStatus::PartiallyDelivered, SellerOrderStatus::PartiallyRefunded];
+            if (! in_array($sellerOrder->status, $allowed, true)) {
+                return;
+            }
+
+            $totalUnits = (int) $sellerOrder->items->sum('qty');
+            $refundedUnits = (int) CustomerRefundItem::whereIn('order_item_id', $sellerOrder->items->pluck('id'))->sum('units');
+            if ($refundedUnits === 0) {
+                return;
+            }
+
+            $this->orderService->transitionSellerOrderStatus(
+                sellerOrder: $sellerOrder,
+                newStatus: $refundedUnits >= $totalUnits ? SellerOrderStatus::Refunded : SellerOrderStatus::PartiallyRefunded,
+                actorType: 'returns_service',
+                actorId: 0,
+                reason: "{$refundedUnits} of {$totalUnits} unit(s) refunded after return",
+            );
+        });
+    }
+
+    public function recordReshipDelivered(string $sellerOrderId, int $codCollectedPaise, bool $allItemsDelivered): void
+    {
+        DB::transaction(function () use ($sellerOrderId, $codCollectedPaise, $allItemsDelivered) {
+            /** @var SellerOrder $sellerOrder */
+            $sellerOrder = SellerOrder::lockForUpdate()->findOrFail($sellerOrderId);
+
+            if ($codCollectedPaise > 0 && $sellerOrder->expected_cod_amount_paise !== null) {
+                $sellerOrder->update(['expected_cod_amount_paise' => $sellerOrder->expected_cod_amount_paise + $codCollectedPaise]);
+            }
+
+            if ($allItemsDelivered && $sellerOrder->status === SellerOrderStatus::PartiallyDelivered) {
+                $this->orderService->transitionSellerOrderStatus(
+                    sellerOrder: $sellerOrder,
+                    newStatus: SellerOrderStatus::Delivered,
+                    actorType: 'returns_service',
+                    actorId: 0,
+                    reason: 'Remaining items delivered by reship',
+                );
+            }
+        });
+    }
+
+    public function markPartialDelivered(
+        string $sellerOrderId,
+        ?string $reason = null,
+    ): void {
+        /** @var SellerOrder $sellerOrder */
+        $sellerOrder = SellerOrder::findOrFail($sellerOrderId);
+
+        event(new SellerOrderPartialDelivered(
+            sellerOrderId: $sellerOrder->id,
+            sellerProfileId: (int) $sellerOrder->seller_profile_id,
+            reason: $reason ?? 'Carrier marked package as Partial Delivered',
+        ));
     }
 
     public function revertToPacked(

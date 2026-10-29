@@ -29,6 +29,9 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $packed_at
  * @property Carbon|null $shipped_at
  * @property Carbon|null $delivered_at
+ * @property Carbon|null $rto_delivered_at
+ * @property string|null $replacement_of_return_request_id
+ * @property int|null $expected_cod_amount_paise COD to collect when only some items were delivered; null = full grand_total
  * @property Carbon|null $cancelled_at
  * @property string|null $cancellation_reason
  * @property string|null $cancelled_by_type
@@ -65,6 +68,9 @@ class SellerOrder extends Model
         'courier_name',
         'tracking_number',
         'delivered_at',
+        'rto_delivered_at',
+        'expected_cod_amount_paise',
+        'replacement_of_return_request_id',
         'cancelled_at',
         'cancellation_reason',
         'cancelled_by_type',
@@ -89,6 +95,8 @@ class SellerOrder extends Model
             'packed_at' => 'datetime',
             'shipped_at' => 'datetime',
             'delivered_at' => 'datetime',
+            'rto_delivered_at' => 'datetime',
+            'expected_cod_amount_paise' => 'integer',
             'cancelled_at' => 'datetime',
             'invoice_date' => 'date',
         ];

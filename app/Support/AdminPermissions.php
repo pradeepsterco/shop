@@ -74,6 +74,12 @@ class AdminPermissions
 
     public const COUPONS_MANAGE = 'coupons.manage';
 
+    public const RETURNS_VIEW = 'returns.view';
+
+    public const RETURNS_MANAGE = 'returns.manage';
+
+    public const REFUNDS_MANAGE = 'refunds.manage';
+
     /**
      * Get all registered permissions grouped by module.
      *
@@ -251,6 +257,20 @@ class AdminPermissions
                 self::COUPONS_MANAGE => [
                     'label' => 'Manage Coupons',
                     'description' => 'Create, edit, pause, duplicate, and configure coupon scopes and limits.',
+                ],
+            ],
+            'Returns & Claims' => [
+                self::RETURNS_VIEW => [
+                    'label' => 'View Returns & Claims',
+                    'description' => 'View RTO condition reports, inspections, and courier claims.',
+                ],
+                self::RETURNS_MANAGE => [
+                    'label' => 'Manage Returns & Claims',
+                    'description' => 'Decide RTO restock vs write-off, file claims, and handle partial delivery.',
+                ],
+                self::REFUNDS_MANAGE => [
+                    'label' => 'Manage Refunds',
+                    'description' => 'See full customer payout details and record refund payouts (UTR) or failures.',
                 ],
             ],
         ];

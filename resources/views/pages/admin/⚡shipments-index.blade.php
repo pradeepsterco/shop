@@ -152,8 +152,11 @@ new #[Layout('layouts.admin')] #[Title('Shipments')] class extends Component {
                             </td>
                             <td class="px-6 py-4">
                                 <span class="inline-flex items-center rounded-lg px-2 py-0.5 text-[11px] font-bold {{ $shipment->status->badgeClasses() }}">
-                                    {{ $shipment->status->label() }}
+                                    {{ $shipment->statusLabel() }}
                                 </span>
+                                @if ($shipment->isReverse())
+                                    <p data-test="reverse-shipment-badge" class="mt-1 text-[10px] font-bold uppercase text-amber-700 dark:text-amber-400">{{ $shipment->direction->label() }}</p>
+                                @endif
                             </td>
                             <td class="px-6 py-4 font-semibold text-zinc-900 dark:text-white">
                                 {{ number_format($shipment->chargeable_weight_grams) }} g

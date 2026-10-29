@@ -16,6 +16,8 @@ use Illuminate\Support\Str;
  * @property string $hsn_code
  * @property float $gst_rate
  * @property bool $is_active
+ * @property bool $is_returnable
+ * @property int|null $return_window_days
  * @property Category|null $category
  * @property Collection<int, VerticalAttribute> $attributes
  * @property Collection<int, Product> $products
@@ -29,6 +31,12 @@ class Vertical extends Model
         'hsn_code',
         'gst_rate',
         'is_active',
+        'is_returnable',
+        'return_window_days',
+    ];
+
+    protected $attributes = [
+        'is_returnable' => true,
     ];
 
     protected function casts(): array
@@ -36,6 +44,8 @@ class Vertical extends Model
         return [
             'gst_rate' => 'float',
             'is_active' => 'boolean',
+            'is_returnable' => 'boolean',
+            'return_window_days' => 'integer',
         ];
     }
 

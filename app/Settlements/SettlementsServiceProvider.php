@@ -5,6 +5,8 @@ namespace App\Settlements;
 use App\Fees\Events\FeesCalculated;
 use App\Orders\Events\SellerOrderCancelled;
 use App\Orders\Events\SellerOrderDelivered;
+use App\Orders\Events\SellerOrderPartialDelivered;
+use App\Orders\Events\SellerOrderReturnedToOrigin;
 use App\Settlements\Commands\BackfillSettlementsCommand;
 use App\Settlements\Commands\CreateWeeklyPayoutBatchCommand;
 use App\Settlements\Commands\ReleaseEligibleSettlementsCommand;
@@ -12,6 +14,8 @@ use App\Settlements\Contracts\PayoutServiceInterface;
 use App\Settlements\Contracts\SellerLedgerServiceInterface;
 use App\Settlements\Contracts\SettlementServiceInterface;
 use App\Settlements\Listeners\CreateSettlementOnFeesCalculated;
+use App\Settlements\Listeners\HoldSettlementOnPartialDelivery;
+use App\Settlements\Listeners\ProcessRtoSettlementOnOrderReturned;
 use App\Settlements\Listeners\PutSettlementOnHoldOnDelivered;
 use App\Settlements\Listeners\VoidSettlementOnOrderCancelled;
 use App\Settlements\Services\PayoutService;
@@ -41,6 +45,8 @@ class SettlementsServiceProvider extends ServiceProvider
         Event::listen(FeesCalculated::class, CreateSettlementOnFeesCalculated::class);
         Event::listen(SellerOrderDelivered::class, PutSettlementOnHoldOnDelivered::class);
         Event::listen(SellerOrderCancelled::class, VoidSettlementOnOrderCancelled::class);
+        Event::listen(SellerOrderReturnedToOrigin::class, ProcessRtoSettlementOnOrderReturned::class);
+        Event::listen(SellerOrderPartialDelivered::class, HoldSettlementOnPartialDelivery::class);
 
         if ($this->app->runningInConsole()) {
             $this->commands([

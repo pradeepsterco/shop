@@ -44,7 +44,9 @@ class PayoutService implements PayoutServiceInterface
             }
 
             // 2. Lock and fetch all eligible settlements
+            // An open customer return keeps the package out of payouts until it is resolved
             $eligibleSettlements = SellerOrderSettlement::where('status', SettlementStatus::Eligible->value)
+                ->where('is_return_hold', false)
                 ->lockForUpdate()
                 ->get();
 

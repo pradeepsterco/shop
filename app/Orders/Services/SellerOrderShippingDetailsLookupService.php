@@ -64,8 +64,9 @@ class SellerOrderShippingDetailsLookupService implements SellerOrderShippingDeta
             );
         }
 
+        // A package with nothing to collect (e.g. a ₹0 replacement) is not sent as COD
         $isCod = match ($order->payment_method) {
-            PaymentMethod::CashOnDelivery => true,
+            PaymentMethod::CashOnDelivery => (int) $sellerOrder->grand_total > 0,
         };
         $codAmountPaise = (int) $sellerOrder->grand_total;
 
@@ -104,6 +105,7 @@ class SellerOrderShippingDetailsLookupService implements SellerOrderShippingDeta
             grandTotalPaise: (int) $sellerOrder->grand_total,
             items: $items,
             estimatedTotalWeightGrams: max(100, $totalWeight),
+            customerEmail: $order->user->email,
         );
     }
 }

@@ -12,6 +12,7 @@ use App\Shipping\DTOs\SellerWarehouseRegistrationDto;
 use App\Shipping\DTOs\ServiceabilityResultDto;
 use App\Shipping\DTOs\TrackingStatusDto;
 use App\Shipping\Enums\ShipmentStatus;
+use App\Shipping\Models\Shipment;
 use Illuminate\Support\Str;
 
 class ManualCarrierDriver implements ShippingCarrierInterface
@@ -66,6 +67,19 @@ class ManualCarrierDriver implements ShippingCarrierInterface
         );
     }
 
+    public function createReverseShipment(
+        CreateShipmentRequestDto $request,
+        SellerOrderShippingDetailsDto $details,
+        SellerOrderInvoiceDto $invoice,
+        string $returnReason,
+        ?Shipment $shipment = null,
+    ): CreateShipmentResponseDto {
+        // Manual carrier: staff arrange the pickup themselves; we only issue a reference
+        $awb = 'MAN-RVP-'.strtoupper(Str::random(10));
+
+        return new CreateShipmentResponseDto(success: true, awb: $awb, vendorWbn: $awb, publicTrackingUrl: null, estimatedChargesPaise: 0);
+    }
+
     public function downloadLabel(string $awb): string
     {
         return "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 300 400]/Parent 2 0 R/Resources<<>>>>endobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000052 00000 n \n0000000109 00000 n \ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n185\n%%EOF";
@@ -81,6 +95,14 @@ class ManualCarrierDriver implements ShippingCarrierInterface
         return true;
     }
 
+    public function requestNdrAction(string $awb, string $action, array $payload = []): array
+    {
+        return [
+            'success' => true,
+            'message' => "Manual NDR action [{$action}] recorded.",
+        ];
+    }
+
     public function track(string $awb): TrackingStatusDto
     {
         return new TrackingStatusDto(
@@ -89,7 +111,6 @@ class ManualCarrierDriver implements ShippingCarrierInterface
             providerStatus: 'Manual In Transit',
             location: 'Local Hub',
             description: 'Package in manual transit',
-            occurredAt: now(),
         );
     }
 }

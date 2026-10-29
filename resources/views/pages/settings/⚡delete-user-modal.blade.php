@@ -28,6 +28,14 @@ new class extends Component {
             return;
         }
 
+        // Returns and refunds in progress need the account (to collect the item and pay the customer back)
+        if (app(\App\Returns\Contracts\ReturnRequestServiceInterface::class)->hasOpenReturns($user->id)
+            || app(\App\Orders\Contracts\CustomerRefundServiceInterface::class)->hasOpenRefunds($user->id)) {
+            $this->addError('password', 'You can delete your account once your open returns are finished and any refund owed to you has been paid. We are working on them now.');
+
+            return;
+        }
+
         try {
             if ($user->hasAnyOrders()) {
                 $user->anonymize();

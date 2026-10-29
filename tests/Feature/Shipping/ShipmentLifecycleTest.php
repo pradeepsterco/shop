@@ -12,6 +12,8 @@ use App\Orders\Models\SellerOrder;
 use App\Shipping\Contracts\CarrierManagerInterface;
 use App\Shipping\Contracts\ShipmentServiceInterface;
 use App\Shipping\Drivers\FakeCarrierDriver;
+use App\Shipping\Enums\ShipmentDirection;
+use App\Shipping\Enums\ShipmentPurpose;
 use App\Shipping\Enums\ShipmentStatus;
 use App\Shipping\Models\Shipment;
 use Illuminate\Support\Facades\Artisan;
@@ -239,4 +241,37 @@ test('poll command skips shipments in terminal statuses (delivered, rto_delivere
         ->count();
 
     expect($polledCount)->toBe(2);
+});
+
+test('a return pickup on the seller order does not block or count as a forward shipment attempt', function () {
+    $reverse = Shipment::create([
+        'order_id' => $this->order->id,
+        'seller_order_id' => $this->sellerOrder->id,
+        'seller_profile_id' => $this->seller->id,
+        'direction' => ShipmentDirection::Reverse,
+        'purpose' => ShipmentPurpose::CustomerReturn,
+        'provider' => 'fake',
+        'status' => ShipmentStatus::Created,
+        'creation_step' => 'label_ready',
+        'awb' => 'SIM-REV-LIFECYCLE',
+        'actual_weight_grams' => 500,
+        'volumetric_weight_grams' => 500,
+        'chargeable_weight_grams' => 500,
+        'length_cm' => 10,
+        'width_cm' => 10,
+        'height_cm' => 10,
+    ]);
+
+    $forward = app(ShipmentServiceInterface::class)->createShipmentForSellerOrder(
+        sellerOrderId: $this->sellerOrder->id,
+        actualWeightGrams: 500,
+        lengthCm: 10,
+        widthCm: 10,
+        heightCm: 10,
+    );
+
+    expect($forward->id)->not->toBe($reverse->id)
+        ->and($forward->direction)->toBe(ShipmentDirection::Forward)
+        ->and($forward->purpose)->toBe(ShipmentPurpose::Original)
+        ->and($forward->fulfillment_attempt)->toBe(1);
 });

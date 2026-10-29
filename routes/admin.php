@@ -6,6 +6,8 @@ use App\Http\Controllers\Admin\AdminSellerDocumentController;
 use App\Http\Middleware\AuthenticateAdminSession;
 use App\Http\Middleware\EnsureAdminIsActive;
 use App\Http\Middleware\EnsureAdminPasswordChanged;
+use App\Returns\Http\Controllers\ReturnPhotoController;
+use App\Returns\Http\Controllers\RtoPhotoController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
@@ -54,6 +56,12 @@ Route::middleware(['auth:admin', EnsureAdminIsActive::class, AuthenticateAdminSe
     Route::livewire('shipping/settings', 'pages::admin.shipping-settings')->name('shipping.settings')->middleware('can:shipping.view');
     Route::livewire('shipping/shipments', 'pages::admin.shipments-index')->name('shipments.index')->middleware('can:shipping.view');
     Route::livewire('shipping/shipments/{shipment}', 'pages::admin.shipments-show')->name('shipments.show')->middleware('can:shipping.view');
+
+    // Returns & Claims
+    Route::livewire('returns', 'pages::admin.returns-index')->name('returns.index')->middleware('can:returns.view');
+    Route::get('returns/requests/{request}/photos/{kind}/{index}', [ReturnPhotoController::class, 'admin'])->whereIn('kind', ['customer', 'seller'])->whereNumber('index')->name('returns.request-photo')->middleware('can:returns.view');
+    Route::livewire('refunds', 'pages::admin.refunds-index')->name('refunds.index')->middleware('can:returns.view');
+    Route::get('returns/rto-reports/{report}/photos/{index}', [RtoPhotoController::class, 'admin'])->whereNumber('index')->name('returns.rto-photo')->middleware('can:returns.view');
 
     // Staff & Roles Management
     Route::livewire('staff', 'pages::admin.staff')->name('staff')->middleware('can:admins.view');

@@ -28,6 +28,7 @@ new #[Layout('layouts.admin')] #[Title('Pages Management')] class extends Compon
     public string $newType = 'landing';
     public string $newSeoTitle = '';
     public string $newSeoDescription = '';
+    public bool $is_slug_customized = false;
 
     // Delete Modal state
     public ?int $deletingPageId = null;
@@ -39,9 +40,42 @@ new #[Layout('layouts.admin')] #[Title('Pages Management')] class extends Compon
 
     public function updatedNewTitle(string $val): void
     {
-        if (empty($this->newSlug) || $this->newSlug === Str::slug(Str::beforeLast($val, ' '))) {
-            $this->newSlug = Str::slug($val);
+        if (! $this->is_slug_customized) {
+            $this->newSlug = Str::slug($val) ?: ($this->newType === 'home' ? 'home' : '');
         }
+    }
+
+    public function updatedNewSlug(string $val): void
+    {
+        $clean = Str::slug($val);
+        $this->newSlug = $clean;
+
+        if (blank($val) || $clean === Str::slug($this->newTitle) || ($this->newType === 'home' && $clean === 'home')) {
+            $this->is_slug_customized = false;
+            if (blank($val)) {
+                $this->newSlug = Str::slug($this->newTitle) ?: ($this->newType === 'home' ? 'home' : '');
+            }
+        } else {
+            $this->is_slug_customized = true;
+        }
+    }
+
+    public function updatedNewType(string $val): void
+    {
+        if ($val === 'home') {
+            if (blank($this->newTitle)) {
+                $this->newTitle = 'Home';
+            }
+            if (blank($this->newSlug) || ! $this->is_slug_customized) {
+                $this->newSlug = 'home';
+            }
+        }
+    }
+
+    public function resetSlug(): void
+    {
+        $this->is_slug_customized = false;
+        $this->newSlug = Str::slug($this->newTitle) ?: ($this->newType === 'home' ? 'home' : '');
     }
 
     public function updatedSearch(): void
@@ -68,6 +102,7 @@ new #[Layout('layouts.admin')] #[Title('Pages Management')] class extends Compon
         $this->newType = 'landing';
         $this->newSeoTitle = '';
         $this->newSeoDescription = '';
+        $this->is_slug_customized = false;
         $this->showCreateModal = true;
     }
 
@@ -75,6 +110,9 @@ new #[Layout('layouts.admin')] #[Title('Pages Management')] class extends Compon
     {
         $this->authorize(AdminPermissions::PAGES_MANAGE);
 
+        if (blank($this->newSlug)) {
+            $this->newSlug = Str::slug($this->newTitle) ?: ($this->newType === 'home' ? 'home' : 'page');
+        }
         $validated = $this->validate([
             'newTitle' => ['required', 'string', 'max:255'],
             'newSlug' => ['required', 'string', 'max:150', 'alpha_dash', 'unique:content_pages,slug'],
@@ -334,16 +372,23 @@ new #[Layout('layouts.admin')] #[Title('Pages Management')] class extends Compon
                     </div>
 
                     <div>
-                        <label class="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">Slug *</label>
+                        <div class="flex items-center justify-between">
+                            <label class="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">Slug *</label>
+                            @if ($is_slug_customized)
+                                <button type="button" wire:click="resetSlug" class="text-xs font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 transition cursor-pointer">
+                                    Reset to auto-slug
+                                </button>
+                            @endif
+                        </div>
                         <div class="mt-1 flex rounded-lg shadow-xs">
                             <span class="inline-flex items-center rounded-l-lg border border-r-0 border-zinc-300 bg-zinc-50 px-3 text-xs text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400 font-mono">
-                                /pages/
+                                {{ $newType === 'home' ? '/' : '/pages/' }}
                             </span>
                             <input
                                 type="text"
-                                wire:model="newSlug"
+                                wire:model.blur="newSlug"
                                 required
-                                placeholder="festive-mega-sale"
+                                placeholder="{{ $newType === 'home' ? 'home' : 'festive-mega-sale' }}"
                                 class="block w-full rounded-r-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-mono text-zinc-900 focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
                             />
                         </div>
@@ -353,7 +398,7 @@ new #[Layout('layouts.admin')] #[Title('Pages Management')] class extends Compon
                     <div>
                         <label class="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">Page Type *</label>
                         <select
-                            wire:model="newType"
+                            wire:model.live="newType"
                             required
                             class="mt-1 block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
                         >

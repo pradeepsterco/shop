@@ -187,3 +187,25 @@ test('page builder handles add-section, reordering, and media selection', functi
     $item->refresh();
     expect($item->desktop_media_id)->toBe($media->id);
 });
+
+test('create page modal auto-generates slug and allows creating homepage with title Home', function () {
+    $admin = Admin::factory()->create();
+    $admin->givePermissionTo(AdminPermissions::PAGES_VIEW);
+    $admin->givePermissionTo(AdminPermissions::PAGES_MANAGE);
+
+    Livewire::actingAs($admin, 'admin')
+        ->test('pages::admin.content.pages-index')
+        ->call('openCreateModal')
+        ->set('newTitle', 'Home')
+        ->assertSet('newSlug', 'home')
+        ->set('newType', 'home')
+        ->assertSet('newSlug', 'home')
+        ->call('createPage')
+        ->assertHasNoErrors()
+        ->assertRedirect();
+
+    $page = ContentPage::where('slug', 'home')->first();
+    expect($page)->not->toBeNull()
+        ->and($page->title)->toBe('Home')
+        ->and($page->type)->toBe(PageType::Home);
+});

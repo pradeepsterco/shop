@@ -6,15 +6,20 @@ use App\Orders\Enums\SellerOrderStatus;
 use App\Orders\Models\Order;
 use App\Orders\Models\SellerOrder;
 use App\Orders\Services\OrderService;
+use App\Returns\Contracts\ReturnRequestServiceInterface;
+use App\Returns\Enums\ReturnReason;
 use App\Services\AdminActivityLogger;
 use App\Support\AdminPermissions;
 use Illuminate\Support\Facades\Gate;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
+use Livewire\WithFileUploads;
 
 new #[Layout('layouts.admin')] #[Title('Order Details')] class extends Component
 {
+    use WithFileUploads;
+
     public Order $order;
 
     public int $customerLifetimeOrdersCount = 0;
@@ -82,6 +87,65 @@ new #[Layout('layouts.admin')] #[Title('Order Details')] class extends Component
         $maskedCount = strlen($cleaned) - 4;
 
         return str_repeat('•', $maskedCount).$visibleDigits;
+    }
+
+    // Return created by an admin outside the normal rules (e.g. after the window), reason required and logged
+    public ?string $overrideSellerOrderId = null;
+
+    /** @var array<int, int|string> */
+    public array $overrideUnits = [];
+
+    public string $overrideReturnReason = '';
+
+    public string $overridePreference = 'refund';
+
+    public string $overrideNote = '';
+
+    public array $overridePhotos = [];
+
+    public function openOverrideReturn(string $sellerOrderId): void
+    {
+        Gate::authorize(AdminPermissions::RETURNS_MANAGE);
+        abort_unless($this->order->sellerOrders->contains('id', $sellerOrderId), 404);
+
+        $this->overrideSellerOrderId = $sellerOrderId;
+        $this->reset(['overrideUnits', 'overrideReturnReason', 'overrideNote', 'overridePhotos']);
+    }
+
+    public function createOverrideReturn(ReturnRequestServiceInterface $returns): void
+    {
+        Gate::authorize(AdminPermissions::RETURNS_MANAGE);
+        $this->resetErrorBag();
+        if (! $this->overrideSellerOrderId) {
+            return;
+        }
+
+        $reason = ReturnReason::tryFrom($this->overrideReturnReason);
+        if (! $reason) {
+            $this->addError('override', 'Choose the return reason.');
+
+            return;
+        }
+
+        try {
+            $returns->create(
+                userId: (int) $this->order->user_id,
+                sellerOrderId: $this->overrideSellerOrderId,
+                reason: $reason,
+                preference: $this->overridePreference,
+                units: array_map('intval', $this->overrideUnits),
+                photos: $this->overridePhotos,
+                overrideByAdminId: (int) auth()->id(),
+                overrideReason: $this->overrideNote,
+            );
+
+            session()->flash('order_success', "Return created on the customer's behalf; it is in the returns queue.");
+            $this->overrideSellerOrderId = null;
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            $this->addError('override', collect($e->errors())->flatten()->first());
+        } catch (\DomainException $e) {
+            $this->addError('override', $e->getMessage());
+        }
     }
 
     public function markDelivered(string $sellerOrderId, OrderService $orderService): void
@@ -174,6 +238,46 @@ new #[Layout('layouts.admin')] #[Title('Order Details')] class extends Component
                 Fulfillment Packages ({{ $order->sellerOrders->count() }})
             </h2>
 
+            @if ($overrideSellerOrderId)
+                @php
+                    $overridePackage = $order->sellerOrders->firstWhere('id', $overrideSellerOrderId);
+                    $overrideLines = app(ReturnRequestServiceInterface::class)->returnableLines($overrideSellerOrderId);
+                @endphp
+                <form wire:submit.prevent="createOverrideReturn" data-test="override-return-form" class="rounded-2xl border border-amber-300 bg-amber-50 p-5 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200 space-y-3">
+                    <h3 class="text-sm font-bold">Create a return for {{ $overridePackage?->seller_store_name }} (admin override)</h3>
+                    <p>Use this when the customer cannot request it themselves, e.g. after the return window. The reason is required and logged.</p>
+                    @foreach ($overrideLines as $itemId => $line)
+                        @if ($line['available'] > 0)
+                            <label class="flex items-center justify-between gap-2">
+                                <span>{{ $line['title'] }} @if ($line['deadline']) (window {{ now()->greaterThan($line['deadline']) ? 'closed' : 'open until' }} @datetime($line['deadline'])) @endif</span>
+                                <select wire:model="overrideUnits.{{ $itemId }}" class="rounded-lg border border-amber-300 bg-white p-1.5 dark:bg-zinc-900">
+                                    @for ($n = 0; $n <= $line['available']; $n++)
+                                        <option value="{{ $n }}">{{ $n }}</option>
+                                    @endfor
+                                </select>
+                            </label>
+                        @endif
+                    @endforeach
+                    <select wire:model="overrideReturnReason" class="w-full rounded-lg border border-amber-300 bg-white p-2 dark:bg-zinc-900">
+                        <option value="">Return reason</option>
+                        @foreach (ReturnReason::cases() as $reason)
+                            <option value="{{ $reason->value }}">{{ $reason->label() }}</option>
+                        @endforeach
+                    </select>
+                    <div class="flex gap-4">
+                        <label><input type="radio" wire:model="overridePreference" value="refund" /> Refund</label>
+                        <label><input type="radio" wire:model="overridePreference" value="replacement" /> Replacement</label>
+                    </div>
+                    <input type="file" wire:model="overridePhotos" multiple accept="image/jpeg,image/png,image/webp" class="block w-full" />
+                    <input wire:model="overrideNote" type="text" placeholder="Why is this allowed? (required, logged)" data-test="override-note" class="w-full rounded-lg border border-amber-300 bg-white p-2 dark:bg-zinc-900" />
+                    @error('override') <p data-test="override-error" class="font-semibold text-red-600">{{ $message }}</p> @enderror
+                    <div class="flex gap-2">
+                        <button type="submit" wire:confirm="Create this return on the customer's behalf?" data-test="create-override-return-btn" class="rounded-lg bg-amber-600 px-4 py-2 font-bold text-white">Create return</button>
+                        <button type="button" wire:click="$set('overrideSellerOrderId', null)" class="rounded-lg border border-amber-400 px-4 py-2">Cancel</button>
+                    </div>
+                </form>
+            @endif
+
             @foreach ($order->sellerOrders as $sellerOrder)
                 <div class="rounded-2xl border border-zinc-200 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden" data-test="seller-package-card">
                     <div class="border-b border-zinc-100 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-800/40 flex flex-wrap items-center justify-between gap-3">
@@ -201,6 +305,16 @@ new #[Layout('layouts.admin')] #[Title('Order Details')] class extends Component
                                     {{ $sellerOrder->courier_name }}: <span class="font-mono font-bold text-zinc-700 dark:text-zinc-300">{{ $sellerOrder->tracking_number }}</span>
                                 </div>
                             @endif
+                            @can(AdminPermissions::RETURNS_VIEW)
+                                @if (\App\Returns\Models\ReturnRequest::where('seller_order_id', $sellerOrder->id)->exists())
+                                    <a href="{{ route('admin.returns.index', ['sellerOrder' => $sellerOrder->id, 'status' => 'all']) }}" wire:navigate data-test="order-returns-link" class="text-[11px] font-bold text-indigo-600 underline dark:text-indigo-400">Returns</a>
+                                @endif
+                            @endcan
+                            @can(AdminPermissions::RETURNS_MANAGE)
+                                @if (in_array($sellerOrder->status->value, ['delivered', 'partially_delivered', 'partially_refunded'], true))
+                                    <button type="button" wire:click="openOverrideReturn('{{ $sellerOrder->id }}')" data-test="open-override-return-btn" class="text-[11px] font-bold text-zinc-600 underline dark:text-zinc-300">Create return</button>
+                                @endif
+                            @endcan
                             <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold uppercase {{ $sellerOrder->status->value === 'cancelled' ? 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300' : ($sellerOrder->status->value === 'delivered' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' : 'bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300') }}">
                                 {{ $sellerOrder->status->label() }}
                             </span>

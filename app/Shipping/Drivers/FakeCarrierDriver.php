@@ -12,6 +12,7 @@ use App\Shipping\DTOs\SellerWarehouseRegistrationDto;
 use App\Shipping\DTOs\ServiceabilityResultDto;
 use App\Shipping\DTOs\TrackingStatusDto;
 use App\Shipping\Enums\ShipmentStatus;
+use App\Shipping\Models\Shipment;
 use Illuminate\Support\Str;
 
 class FakeCarrierDriver implements ShippingCarrierInterface
@@ -72,6 +73,28 @@ class FakeCarrierDriver implements ShippingCarrierInterface
                 'country' => 'India',
             ],
         ];
+    }
+
+    public function createReverseShipment(
+        CreateShipmentRequestDto $request,
+        SellerOrderShippingDetailsDto $details,
+        SellerOrderInvoiceDto $invoice,
+        string $returnReason,
+        ?Shipment $shipment = null,
+    ): CreateShipmentResponseDto {
+        if ($this->shouldFailCreation) {
+            return new CreateShipmentResponseDto(
+                success: false,
+                awb: null,
+                vendorWbn: null,
+                publicTrackingUrl: null,
+                errorMessage: 'Simulated fake return pickup booking failure',
+            );
+        }
+
+        $awb = 'SIM-RVP-'.strtoupper(Str::random(10));
+
+        return new CreateShipmentResponseDto(success: true, awb: $awb, vendorWbn: $awb, publicTrackingUrl: null, estimatedChargesPaise: 0);
     }
 
     public function createShipment(
@@ -139,6 +162,88 @@ class FakeCarrierDriver implements ShippingCarrierInterface
         return true;
     }
 
+    public function requestNdrAction(string $awb, string $action, array $payload = []): array
+    {
+        $normalizedAction = strtolower(trim($action));
+
+        if ($normalizedAction === 'rto' || $normalizedAction === 'return') {
+            $this->trackingMap[$awb] = new TrackingStatusDto(
+                awb: $awb,
+                status: ShipmentStatus::RtoInitiated,
+                providerStatus: 'RTO Initiated',
+                location: 'Destination Delivery Hub',
+                description: $payload['instructions'] ?? 'RTO requested by administration',
+                occurredAt: now(),
+                providerNdrStatus: 'RTO',
+                providerEventId: 'SIM-'.Str::ulid(),
+            );
+
+            return [
+                'success' => true,
+                'message' => 'Simulated RTO initiated successfully.',
+            ];
+        }
+
+        if ($normalizedAction === 'reattempt' || $normalizedAction === 're-attempt') {
+            $dateStr = $payload['reattempt_date'] ?? 'Next business day';
+
+            $desc = "Delivery re-attempt scheduled for {$dateStr}.";
+            if (! empty($payload['phone'])) {
+                $desc .= " Updated phone: {$payload['phone']}.";
+            }
+            if (! empty($payload['address'])) {
+                $desc .= " Updated address: {$payload['address']}.";
+            }
+
+            $this->trackingMap[$awb] = new TrackingStatusDto(
+                awb: $awb,
+                status: ShipmentStatus::InTransit,
+                providerStatus: 'In Transit - Re-Attempt Scheduled',
+                location: 'Destination Hub',
+                description: $desc,
+                occurredAt: now(),
+                providerNdrStatus: 'REATTEMPT_SCHEDULED',
+                providerEventId: 'SIM-'.Str::ulid(),
+            );
+
+            return [
+                'success' => true,
+                'message' => 'Simulated re-attempt scheduled successfully.',
+            ];
+        }
+
+        return [
+            'success' => false,
+            'message' => "Unsupported NDR action: {$action}",
+        ];
+    }
+
+    public function simulateStatusChange(
+        string $awb,
+        ShipmentStatus $status,
+        ?string $reason = null,
+        ?string $location = null,
+    ): TrackingStatusDto {
+        $loc = $location ?? 'Bengaluru Central Hub';
+        $desc = $reason ?? $status->label();
+
+        $dto = new TrackingStatusDto(
+            awb: $awb,
+            status: $status,
+            providerStatus: $status->label(),
+            location: $loc,
+            description: $desc,
+            occurredAt: now(),
+            pickedUpAt: in_array($status, [ShipmentStatus::PickedUp, ShipmentStatus::InTransit, ShipmentStatus::OutForDelivery, ShipmentStatus::Delivered], true) ? now() : null,
+            providerNdrStatus: $status === ShipmentStatus::DeliveryFailed ? ($reason ?? 'Delivery Attempt Failed') : null,
+            providerEventId: 'SIM-'.Str::ulid(),
+        );
+
+        $this->trackingMap[$awb] = $dto;
+
+        return $dto;
+    }
+
     public function track(string $awb): TrackingStatusDto
     {
         return $this->trackingMap[$awb] ?? new TrackingStatusDto(
@@ -147,7 +252,6 @@ class FakeCarrierDriver implements ShippingCarrierInterface
             providerStatus: 'In Transit',
             location: 'Hub',
             description: 'In Transit',
-            occurredAt: now(),
         );
     }
 }

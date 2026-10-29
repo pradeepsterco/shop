@@ -81,7 +81,7 @@ class EkartWebhookController
         $swiftStatus = (string) ($payload['status'] ?? 'In Transit');
         $domainStatus = $ekartDriver->mapSwiftStatus($swiftStatus);
 
-        $occurredAt = ! empty($payload['ctime']) ? Carbon::createFromTimestampMs($payload['ctime']) : now();
+        $occurredAt = ! empty($payload['ctime']) ? Carbon::createFromTimestampMs($payload['ctime']) : null;
         $edd = ! empty($payload['edd']) ? Carbon::createFromTimestampMs($payload['edd']) : null;
         $pickedUpAt = ! empty($payload['pickupTime']) ? Carbon::createFromTimestampMs($payload['pickupTime']) : null;
 

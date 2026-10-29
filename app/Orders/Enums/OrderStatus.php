@@ -8,6 +8,8 @@ enum OrderStatus: string
     case PartiallyCancelled = 'partially_cancelled';
     case Cancelled = 'cancelled';
     case Completed = 'completed';
+    case PartiallyRefunded = 'partially_refunded';
+    case Refunded = 'refunded';
 
     public function label(): string
     {
@@ -16,6 +18,8 @@ enum OrderStatus: string
             self::PartiallyCancelled => 'Partially Cancelled',
             self::Cancelled => 'Cancelled',
             self::Completed => 'Completed',
+            self::PartiallyRefunded => 'Partially Refunded',
+            self::Refunded => 'Refunded',
         };
     }
 }

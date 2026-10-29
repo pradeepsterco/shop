@@ -2,6 +2,7 @@
 
 namespace App\Shipping\Models;
 
+use App\Shipping\Enums\ShipmentEventType;
 use App\Shipping\Enums\ShipmentStatus;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
@@ -12,6 +13,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $id
  * @property string $shipment_id
  * @property string $event_key
+ * @property ShipmentEventType $event_type
  * @property string $provider
  * @property ShipmentStatus $status
  * @property string $provider_status
@@ -31,10 +33,15 @@ class ShipmentEvent extends Model
 
     protected $table = 'shipment_events';
 
+    protected $attributes = [
+        'event_type' => 'courier_update',
+    ];
+
     protected $fillable = [
         'id',
         'shipment_id',
         'event_key',
+        'event_type',
         'provider',
         'status',
         'provider_status',
@@ -52,6 +59,7 @@ class ShipmentEvent extends Model
     protected function casts(): array
     {
         return [
+            'event_type' => ShipmentEventType::class,
             'status' => ShipmentStatus::class,
             'occurred_at' => 'datetime',
             'received_at' => 'datetime',

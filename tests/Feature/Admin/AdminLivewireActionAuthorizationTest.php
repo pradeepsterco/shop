@@ -15,6 +15,7 @@ use App\Shipping\Models\Shipment;
 use App\Support\AdminPermissions;
 use Illuminate\Support\Str;
 use Livewire\Livewire;
+use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 
 beforeEach(function () {
@@ -499,4 +500,148 @@ test('view-only staff cannot invoke branding mutation actions', function () {
         ->test('pages::admin.settings.branding')
         ->call('resetLogo', 'storefront_logo_light')
         ->assertForbidden();
+});
+
+test('view-only shipping staff cannot invoke ndr or simulation actions', function () {
+    config(['shipping.fake_simulation_enabled' => true]);
+
+    $staff = Admin::factory()->create();
+    $role = Role::findOrCreate('Shipping Viewer NDR', 'admin');
+    $role->syncPermissions([AdminPermissions::SHIPPING_VIEW]);
+    $staff->assignRole($role);
+
+    $shipment = Shipment::create([
+        'seller_order_id' => (string) Str::ulid(),
+        'order_id' => (string) Str::ulid(),
+        'seller_profile_id' => 1,
+        'provider' => 'fake',
+        'awb' => 'FAKE-NDR-RBAC',
+        'status' => ShipmentStatus::DeliveryFailed,
+        'actual_weight_grams' => 500,
+        'volumetric_weight_grams' => 500,
+        'chargeable_weight_grams' => 500,
+        'length_cm' => 15,
+        'width_cm' => 10,
+        'height_cm' => 5,
+    ]);
+
+    foreach ([['submitNdr', []], ['simulateTransition', ['rto_initiated']]] as [$method, $args]) {
+        Livewire::actingAs($staff, 'admin')
+            ->test('pages::admin.shipments-show', ['shipment' => $shipment->id])
+            ->call($method, ...$args)
+            ->assertForbidden();
+    }
+
+    expect($shipment->fresh()->status)->toBe(ShipmentStatus::DeliveryFailed)
+        ->and($shipment->fresh()->ndr_action)->toBeNull();
+});
+
+test('shipping managers without returns.manage cannot invoke returns actions', function (string $method, array $args, ShipmentStatus $status) {
+    $staff = Admin::factory()->create();
+    $role = Role::findOrCreate('Shipping Manager No Returns', 'admin');
+    $role->syncPermissions([AdminPermissions::SHIPPING_VIEW, AdminPermissions::SHIPPING_MANAGE, AdminPermissions::RETURNS_VIEW]);
+    $staff->assignRole($role);
+
+    $shipment = Shipment::create([
+        'seller_order_id' => (string) Str::ulid(),
+        'order_id' => (string) Str::ulid(),
+        'seller_profile_id' => 1,
+        'provider' => 'fake',
+        'awb' => 'FAKE-RET-'.Str::upper(Str::random(5)),
+        'status' => $status,
+        'declared_value_paise' => 10000,
+        'actual_weight_grams' => 500,
+        'volumetric_weight_grams' => 500,
+        'chargeable_weight_grams' => 500,
+        'length_cm' => 15,
+        'width_cm' => 10,
+        'height_cm' => 5,
+    ]);
+
+    Livewire::actingAs($staff, 'admin')
+        ->test('pages::admin.shipments-show', ['shipment' => $shipment->id])
+        ->call($method, ...$args)
+        ->assertForbidden();
+})->with([
+    'confirm lost' => ['confirmLostShipment', [], ShipmentStatus::Lost],
+    'confirm partial delivery' => ['submitPartialDelivery', [], ShipmentStatus::PartialDelivered],
+    'rto restock' => ['submitRtoDecision', ['restocked'], ShipmentStatus::RtoDelivered],
+    'rto write-off' => ['submitRtoDecision', ['written_off'], ShipmentStatus::RtoDelivered],
+    'claim status' => ['updateClaimStatus', ['claim-id', 'approved'], ShipmentStatus::Lost],
+]);
+
+test('staff without returns.view do not see rto reports or courier claims on the shipment page', function () {
+    $staff = Admin::factory()->create();
+    $role = Role::findOrCreate('Shipping Viewer No Returns', 'admin');
+    $role->syncPermissions([AdminPermissions::SHIPPING_VIEW]);
+    $staff->assignRole($role);
+
+    $shipment = Shipment::create([
+        'seller_order_id' => (string) Str::ulid(),
+        'order_id' => (string) Str::ulid(),
+        'seller_profile_id' => 1,
+        'provider' => 'fake',
+        'awb' => 'FAKE-RET-HIDDEN',
+        'status' => ShipmentStatus::RtoDelivered,
+        'actual_weight_grams' => 500,
+        'volumetric_weight_grams' => 500,
+        'chargeable_weight_grams' => 500,
+        'length_cm' => 15,
+        'width_cm' => 10,
+        'height_cm' => 5,
+    ]);
+
+    $this->actingAs($staff, 'admin')
+        ->get(route('admin.shipments.show', ['shipment' => $shipment->id]))
+        ->assertOk()
+        ->assertDontSee('data-test="rto-review-card"', false);
+
+    $role->givePermissionTo(AdminPermissions::RETURNS_VIEW);
+
+    $this->actingAs($staff->fresh(), 'admin')
+        ->get(route('admin.shipments.show', ['shipment' => $shipment->id]))
+        ->assertOk()
+        ->assertSee('data-test="rto-review-card"', false)
+        ->assertDontSee('data-test="rto-writeoff-btn"', false);
+});
+
+test('returns permissions are registered and synced to the admin guard', function () {
+    $this->artisan('permissions:sync')->assertSuccessful();
+
+    expect(AdminPermissions::all())->toContain(AdminPermissions::RETURNS_VIEW, AdminPermissions::RETURNS_MANAGE, AdminPermissions::REFUNDS_MANAGE)
+        ->and(Permission::where('guard_name', 'admin')->whereIn('name', [AdminPermissions::RETURNS_VIEW, AdminPermissions::RETURNS_MANAGE, AdminPermissions::REFUNDS_MANAGE])->count())->toBe(3)
+        ->and(Role::findByName('Super Admin', 'admin')->hasPermissionTo(AdminPermissions::REFUNDS_MANAGE))->toBeTrue()
+        ->and(Role::findByName('Super Admin', 'admin')->hasPermissionTo(AdminPermissions::RETURNS_MANAGE))->toBeTrue();
+});
+
+test('staff without refunds.manage cannot record refund payouts or failures', function (string $method) {
+    $staff = Admin::factory()->create();
+    $role = Role::findOrCreate('Returns Manager No Refunds', 'admin');
+    $role->syncPermissions([AdminPermissions::RETURNS_VIEW, AdminPermissions::RETURNS_MANAGE]);
+    $staff->assignRole($role);
+
+    Livewire::actingAs($staff, 'admin')
+        ->test('pages::admin.refunds-index')
+        ->call($method, (string) Str::ulid())
+        ->assertForbidden();
+})->with(['markRefundPaid', 'markRefundFailed']);
+
+test('view-only shipping staff cannot retry a courier booking', function () {
+    $staff = Admin::factory()->create();
+    $staff->assignRole(Role::findOrCreate('Shipping Viewer Booking', 'admin')->syncPermissions([AdminPermissions::SHIPPING_VIEW]));
+
+    $shipment = Shipment::create([
+        'seller_order_id' => (string) Str::ulid(), 'order_id' => (string) Str::ulid(), 'seller_profile_id' => 1,
+        'provider' => 'fake', 'status' => ShipmentStatus::Created, 'booking_status' => Shipment::BOOKING_FAILED,
+        'actual_weight_grams' => 500, 'volumetric_weight_grams' => 500, 'chargeable_weight_grams' => 500,
+        'length_cm' => 15, 'width_cm' => 10, 'height_cm' => 5,
+    ]);
+
+    Livewire::actingAs($staff, 'admin')
+        ->test('pages::admin.shipments-show', ['shipment' => $shipment->id])
+        ->assertDontSee('data-test="retry-booking-btn"', false)
+        ->call('retryBooking')
+        ->assertForbidden();
+
+    expect($shipment->fresh()->booking_status)->toBe(Shipment::BOOKING_FAILED);
 });

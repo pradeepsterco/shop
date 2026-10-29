@@ -15,6 +15,8 @@ new #[Layout('layouts.admin')] #[Title('Manage Verticals')] class extends Compon
     public string $hsn_code = '';
     public string $gst_rate = '18.00';
     public bool $is_active = true;
+    public bool $is_returnable = true;
+    public string $return_window_days = '';
 
     public bool $showModal = false;
     public ?int $editingVerticalId = null;
@@ -39,6 +41,9 @@ new #[Layout('layouts.admin')] #[Title('Manage Verticals')] class extends Compon
             'hsn_code' => ['required', 'string', 'min:2', 'max:20'],
             'gst_rate' => ['required', 'numeric', 'min:0', 'max:100'],
             'is_active' => ['boolean'],
+            'is_returnable' => ['boolean'],
+            // Blank = returns.default_return_window_days
+            'return_window_days' => ['nullable', 'integer', 'min:1', 'max:90'],
         ];
     }
 
@@ -46,7 +51,7 @@ new #[Layout('layouts.admin')] #[Title('Manage Verticals')] class extends Compon
     {
         $this->authorize('catalog.verticals');
 
-        $this->reset(['name', 'category_id', 'hsn_code', 'gst_rate', 'is_active', 'editingVerticalId']);
+        $this->reset(['name', 'category_id', 'hsn_code', 'gst_rate', 'is_active', 'is_returnable', 'return_window_days', 'editingVerticalId']);
         $this->gst_rate = '18.00';
         $this->is_active = true;
         $this->showModal = true;
@@ -63,6 +68,8 @@ new #[Layout('layouts.admin')] #[Title('Manage Verticals')] class extends Compon
         $this->hsn_code = $v->hsn_code;
         $this->gst_rate = (string) $v->gst_rate;
         $this->is_active = $v->is_active;
+        $this->is_returnable = $v->is_returnable;
+        $this->return_window_days = $v->return_window_days !== null ? (string) $v->return_window_days : '';
         $this->showModal = true;
     }
 
@@ -80,6 +87,8 @@ new #[Layout('layouts.admin')] #[Title('Manage Verticals')] class extends Compon
                 'hsn_code' => $this->hsn_code,
                 'gst_rate' => (float) $this->gst_rate,
                 'is_active' => $this->is_active,
+                'is_returnable' => $this->is_returnable,
+                'return_window_days' => $this->return_window_days === '' ? null : (int) $this->return_window_days,
                 'slug' => Vertical::generateUniqueSlug($this->name, $v->id),
             ]);
 
@@ -91,13 +100,15 @@ new #[Layout('layouts.admin')] #[Title('Manage Verticals')] class extends Compon
                 'hsn_code' => $this->hsn_code,
                 'gst_rate' => (float) $this->gst_rate,
                 'is_active' => $this->is_active,
+                'is_returnable' => $this->is_returnable,
+                'return_window_days' => $this->return_window_days === '' ? null : (int) $this->return_window_days,
             ]);
 
             session()->flash('status', "Vertical [{$v->name}] created.");
         }
 
         $this->showModal = false;
-        $this->reset(['name', 'category_id', 'hsn_code', 'gst_rate', 'editingVerticalId']);
+        $this->reset(['name', 'category_id', 'hsn_code', 'gst_rate', 'is_returnable', 'return_window_days', 'editingVerticalId']);
     }
 
     public function toggleActive(int $id): void
@@ -205,6 +216,9 @@ new #[Layout('layouts.admin')] #[Title('Manage Verticals')] class extends Compon
                             <td class="px-6 py-4 text-xs text-zinc-600 dark:text-zinc-300">
                                 <div>HSN: <span class="font-mono font-semibold">{{ $v->hsn_code }}</span></div>
                                 <div class="text-zinc-400">GST: {{ number_format($v->gst_rate, 1) }}%</div>
+                                <div class="text-zinc-400" data-test="vertical-return-policy">
+                                    {{ $v->is_returnable ? 'Returns: '.($v->return_window_days ?? config('returns.default_return_window_days')).' days' : 'Not returnable (claims only)' }}
+                                </div>
                             </td>
                             <td class="px-6 py-4 text-center">
                                 <a href="{{ route('admin.catalog.vertical-attributes', $v) }}"
@@ -313,6 +327,22 @@ new #[Layout('layouts.admin')] #[Title('Manage Verticals')] class extends Compon
                             <input wire:model="gst_rate" type="number" step="0.01" min="0" max="100" id="v-gst" required placeholder="18.00"
                                    class="mt-1 block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-zinc-500 focus:outline-hidden focus:ring-1 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white" />
                             @error('gst_rate') <p class="mt-1 text-xs text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="flex items-center gap-2 cursor-pointer pt-7">
+                                <input wire:model="is_returnable" type="checkbox" data-test="vertical-returnable" class="size-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-800" />
+                                <span class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Returnable</span>
+                            </label>
+                            <p class="mt-1 text-xs text-zinc-500">Non-returnable still allows damaged, defective, wrong or missing item claims ({{ config('returns.claim_window_days') }} days).</p>
+                        </div>
+                        <div>
+                            <label for="v-return-window" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Return window (days)</label>
+                            <input wire:model="return_window_days" type="number" min="1" max="90" id="v-return-window" placeholder="Default {{ config('returns.default_return_window_days') }}"
+                                   class="mt-1 block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-zinc-500 focus:outline-hidden focus:ring-1 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white" />
+                            @error('return_window_days') <p class="mt-1 text-xs text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
                         </div>
                     </div>
 
