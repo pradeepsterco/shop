@@ -175,6 +175,16 @@ new #[Layout('layouts.storefront')] class extends Component {
         return $matrix;
     }
 
+    #[Computed]
+    public function reviewSummary(): ?\App\Reviews\Models\ReviewSummary
+    {
+        if (! config('reviews.enabled', true) || ! $this->product) {
+            return null;
+        }
+
+        return app(\App\Reviews\Services\ProductReviewService::class)->getSummary($this->product->id);
+    }
+
     public function addToCart(CartService $cartService): void
     {
         $listing = $this->bestListing;
@@ -283,6 +293,9 @@ new #[Layout('layouts.storefront')] class extends Component {
                         {{ $this->currentVariant->displayTitle() }}
                     </p>
                 @endif
+                <div class="mt-2">
+                    <x-product-rating-pill :summary="$this->reviewSummary" />
+                </div>
             </div>
 
             <!-- Pricing Box -->
@@ -439,4 +452,7 @@ new #[Layout('layouts.storefront')] class extends Component {
             </div>
         </div>
     </div>
+
+    <!-- Reviews Section -->
+    <livewire:product-reviews-section :product-id="$this->product->id" />
 </div>

@@ -176,9 +176,25 @@ new #[Layout('layouts.app')] #[Title('Order Details')] class extends Component {
     #[Computed]
     public function order(): ?Order
     {
-        return Order::with(['sellerOrders.items', 'sellerOrders.statusHistories'])
+        return Order::with(['sellerOrders.items.variant.product', 'sellerOrders.statusHistories'])
             ->where('order_number', $this->orderNumber)
             ->first();
+    }
+
+    protected array $eligibilityCache = [];
+
+    public function getReviewEligibilityForProduct(?int $productId): ?\App\Reviews\DTOs\EligibilityResult
+    {
+        if (! $productId || ! config('reviews.enabled', true) || ! auth()->check()) {
+            return null;
+        }
+
+        if (! array_key_exists($productId, $this->eligibilityCache)) {
+            $this->eligibilityCache[$productId] = app(\App\Reviews\Services\ProductReviewService::class)
+                ->checkEligibility(auth()->user(), $productId);
+        }
+
+        return $this->eligibilityCache[$productId];
     }
 
     public function promptCancel(string $sellerOrderId): void
@@ -437,6 +453,38 @@ new #[Layout('layouts.app')] #[Title('Order Details')] class extends Component {
                                         @else
                                             <span data-test="item-not-delivered" class="mt-1 inline-flex rounded-md bg-zinc-100 px-2 py-0.5 text-[11px] font-bold text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">Not delivered &mdash; not charged</span>
                                         @endif
+                                    @endif
+
+                                    @php
+                                        $productId = $item->variant?->product_id;
+                                        $eligibility = $this->getReviewEligibilityForProduct($productId);
+                                        $productSlug = $item->variant?->product?->slug;
+                                        $itemUpid = $item->upid ?: $item->variant?->upid;
+                                    @endphp
+                                    @if (config('reviews.enabled', true) && $productSlug && $itemUpid)
+                                        <div class="mt-2.5 flex items-center gap-2">
+                                            @if ($eligibility?->hasExistingReview)
+                                                <a
+                                                    href="{{ route('product.show', ['slug' => $productSlug, 'upid' => $itemUpid]) }}#reviews"
+                                                    class="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-100 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-200 transition"
+                                                    wire:navigate
+                                                    data-test="edit-order-item-review"
+                                                >
+                                                    <span class="text-amber-500">★</span>
+                                                    Edit Review
+                                                </a>
+                                            @elseif ($eligibility?->canReview)
+                                                <a
+                                                    href="{{ route('product.show', ['slug' => $productSlug, 'upid' => $itemUpid]) }}#reviews"
+                                                    class="inline-flex items-center gap-1 rounded-lg bg-amber-500 px-2.5 py-1 text-xs font-semibold text-white shadow-2xs hover:bg-amber-600 transition"
+                                                    wire:navigate
+                                                    data-test="rate-order-item-review"
+                                                >
+                                                    <span class="text-amber-200">★</span>
+                                                    Rate &amp; Review
+                                                </a>
+                                            @endif
+                                        </div>
                                     @endif
                                 </div>
                                 <div class="text-right">

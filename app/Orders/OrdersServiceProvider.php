@@ -4,6 +4,7 @@ namespace App\Orders;
 
 use App\Coupons\Contracts\CustomerEligibilityInterface;
 use App\Orders\Adapters\OrderCustomerEligibilityAdapter;
+use App\Orders\Adapters\OrderDeliveredReviewEligibilityAdapter;
 use App\Orders\Contracts\CustomerRefundServiceInterface;
 use App\Orders\Contracts\OrderItemsFeeLookupInterface;
 use App\Orders\Contracts\OrderRestockInterface;
@@ -22,6 +23,7 @@ use App\Orders\Services\SellerOrderFulfillmentService;
 use App\Orders\Services\SellerOrderReturnWindowLookupService;
 use App\Orders\Services\SellerOrderShippingDetailsLookupService;
 use App\Orders\Services\SellerOrderStatusLookupService;
+use App\Reviews\Contracts\ReviewEligibilityInterface;
 use Illuminate\Support\ServiceProvider;
 
 class OrdersServiceProvider extends ServiceProvider
@@ -42,6 +44,7 @@ class OrdersServiceProvider extends ServiceProvider
         OrderRestockInterface::class => OrderService::class,
         SellerOrderShippingDetailsLookupInterface::class => SellerOrderShippingDetailsLookupService::class,
         CustomerEligibilityInterface::class => OrderCustomerEligibilityAdapter::class,
+        ReviewEligibilityInterface::class => OrderDeliveredReviewEligibilityAdapter::class,
     ];
 
     public function register(): void

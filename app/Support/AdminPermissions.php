@@ -80,6 +80,10 @@ class AdminPermissions
 
     public const REFUNDS_MANAGE = 'refunds.manage';
 
+    public const REVIEWS_VIEW = 'reviews.view';
+
+    public const REVIEWS_MANAGE = 'reviews.manage';
+
     /**
      * Get all registered permissions grouped by module.
      *
@@ -271,6 +275,16 @@ class AdminPermissions
                 self::REFUNDS_MANAGE => [
                     'label' => 'Manage Refunds',
                     'description' => 'See full customer payout details and record refund payouts (UTR) or failures.',
+                ],
+            ],
+            'Reviews & Ratings' => [
+                self::REVIEWS_VIEW => [
+                    'label' => 'View Reviews',
+                    'description' => 'View customer product reviews, star ratings, and review summaries.',
+                ],
+                self::REVIEWS_MANAGE => [
+                    'label' => 'Moderate Reviews',
+                    'description' => 'Hide, reject, restore, or delete product reviews and recalculate ratings.',
                 ],
             ],
         ];

@@ -9,6 +9,7 @@ use App\Orders\OrdersServiceProvider;
 use App\Providers\AppServiceProvider;
 use App\Providers\FortifyServiceProvider;
 use App\Returns\ReturnsServiceProvider;
+use App\Reviews\ReviewsServiceProvider;
 use App\Sellers\SellersServiceProvider;
 use App\Settlements\SettlementsServiceProvider;
 use App\Shipping\ShippingServiceProvider;
@@ -27,5 +28,6 @@ return [
     BrandingServiceProvider::class,
     ContentServiceProvider::class,
     CouponsServiceProvider::class,
+    ReviewsServiceProvider::class,
     ServiceProvider::class,
 ];

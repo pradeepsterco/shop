@@ -403,6 +403,26 @@ new #[Layout('layouts.storefront')] #[Title('Browse Products')] class extends Co
     }
 
     /**
+     * Batch load review summaries for all visible products on the page to prevent N+1 queries.
+     *
+     * @return Collection<int, \App\Reviews\Models\ReviewSummary>
+     */
+    #[Computed]
+    public function productSummaries(): Collection
+    {
+        if (! config('reviews.enabled', true)) {
+            return collect();
+        }
+
+        $productIds = $this->products->pluck('id')->all();
+        if (empty($productIds)) {
+            return collect();
+        }
+
+        return app(\App\Reviews\Services\ReviewSummaryService::class)->getSummariesForProducts($productIds);
+    }
+
+    /**
      * Whitelist and sanitize attribute filters against the selected vertical.
      *
      * @param array<string, mixed> $rawAttrs
@@ -889,6 +909,14 @@ new #[Layout('layouts.storefront')] #[Title('Browse Products')] class extends Co
                                     <h2 class="text-sm font-medium text-zinc-900 dark:text-white line-clamp-2 leading-snug group-hover:text-amber-600 dark:group-hover:text-amber-400 transition mb-2">
                                         {{ $product->title }}
                                     </h2>
+
+                                    <!-- Review Rating Badge -->
+                                    @php $reviewSummary = $this->productSummaries->get($product->id); @endphp
+                                    @if ($reviewSummary && $reviewSummary->rating_count > 0)
+                                        <div class="mb-2">
+                                            <x-product-rating-pill :summary="$reviewSummary" :show-link="false" />
+                                        </div>
+                                    @endif
 
                                     <!-- Sold By Merchant -->
                                     @if ($buyBox?->sellerProfile)
