@@ -16,14 +16,15 @@
 <body class="min-h-screen bg-zinc-50 font-sans text-zinc-900 antialiased selection:bg-amber-500 selection:text-white dark:bg-zinc-950 dark:text-zinc-100">
     <!-- Storefront Header Navigation -->
     <header class="sticky top-0 z-40 border-b border-zinc-200 bg-white/90 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-900/90">
-        <div class="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+        <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 sm:px-6 md:h-16 md:flex-nowrap md:py-0 lg:px-8">
             <!-- Brand Logo -->
             <div class="flex items-center gap-6">
                 <a href="{{ route('products.index') }}" class="flex items-center gap-2.5 font-bold tracking-tight text-zinc-900 dark:text-white" wire:navigate>
-                    <x-brand.logo area="storefront" size="lg" />
+                    {{-- Slightly smaller on the narrowest phones so the header row still fits --}}
+                    <x-brand.logo area="storefront" size="lg" class="max-[359px]:h-7" />
                 </a>
 
-                <nav class="hidden md:flex items-center gap-1">
+                <nav class="hidden xl:flex items-center gap-1">
                     <a href="{{ route('products.index') }}" class="rounded-lg px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 transition" wire:navigate>
                         All Products
                     </a>
@@ -39,9 +40,17 @@
                 </nav>
             </div>
 
+            <!-- Search (inline from md; own row + full-screen overlay on mobile) -->
+            <div class="order-last flex w-full md:order-none md:w-auto md:flex-1 md:justify-center">
+                <livewire:search-box />
+            </div>
+
             <!-- Theme, Cart & Customer Account / Auth Links -->
             <div class="flex items-center gap-2 sm:gap-3">
-                <x-theme-switcher />
+                {{-- Hidden on phones so the logo and account links fit one row --}}
+                <div class="hidden sm:block">
+                    <x-theme-switcher />
+                </div>
 
                 <livewire:header-cart-badge />
 

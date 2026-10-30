@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\BrandStatus;
 use App\Enums\ProductImageStatus;
 use App\Enums\ProductQcStatus;
+use App\Search\Contracts\SearchIndexerInterface;
 use App\Services\ProductBuyBoxService;
 use Database\Factories\ProductFactory;
 use DomainException;
@@ -99,8 +100,15 @@ class Product extends Model
 
         static::saved(function (Product $product) {
             if ($product->wasChanged('qc_status')) {
+                // Also reindexes search.
                 app(ProductBuyBoxService::class)->refresh($product);
+            } elseif ($product->wasChanged(['title', 'slug', 'highlights', 'specs', 'brand_id', 'vertical_id'])) {
+                app(SearchIndexerInterface::class)->queue($product->id);
             }
+        });
+
+        static::deleted(function (Product $product) {
+            app(SearchIndexerInterface::class)->queue($product->id);
         });
     }
 

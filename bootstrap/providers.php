@@ -10,6 +10,7 @@ use App\Providers\AppServiceProvider;
 use App\Providers\FortifyServiceProvider;
 use App\Returns\ReturnsServiceProvider;
 use App\Reviews\ReviewsServiceProvider;
+use App\Search\SearchServiceProvider;
 use App\Sellers\SellersServiceProvider;
 use App\Settlements\SettlementsServiceProvider;
 use App\Shipping\ShippingServiceProvider;
@@ -29,5 +30,6 @@ return [
     ContentServiceProvider::class,
     CouponsServiceProvider::class,
     ReviewsServiceProvider::class,
+    SearchServiceProvider::class,
     ServiceProvider::class,
 ];

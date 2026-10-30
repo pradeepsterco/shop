@@ -12,11 +12,14 @@ use App\Models\Brand;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\Vertical;
+use App\Search\Contracts\ProductSearchInterface;
+use App\Search\DTOs\SearchResult;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Renderless;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
 use Livewire\Component;
@@ -24,6 +27,9 @@ use Livewire\WithPagination;
 
 new #[Layout('layouts.storefront')] #[Title('Browse Products')] class extends Component {
     use WithPagination;
+
+    #[Url(except: '')]
+    public string $q = '';
 
     #[Url(except: '')]
     public string $category = '';
@@ -51,6 +57,17 @@ new #[Layout('layouts.storefront')] #[Title('Browse Products')] class extends Co
 
     #[Url(except: 'featured')]
     public string $sort = 'featured';
+
+    public function updatedQ(): void
+    {
+        $this->resetPage();
+    }
+
+    public function clearSearch(): void
+    {
+        $this->q = '';
+        $this->resetPage();
+    }
 
     public function updatedCategory(): void
     {
@@ -202,12 +219,31 @@ new #[Layout('layouts.storefront')] #[Title('Browse Products')] class extends Co
     #[Computed]
     public function selectedVertical(): ?Vertical
     {
-        if (filled($this->vertical)) {
-            return Vertical::where('slug', $this->vertical)->where('is_active', true)->first();
+        return $this->resolveVertical($this->category, $this->vertical);
+    }
+
+    /**
+     * Returns variant attributes to show only when exactly ONE vertical is selected.
+     *
+     * @return Collection<int, mixed>
+     */
+    #[Computed]
+    public function dynamicAttributes(): Collection
+    {
+        return $this->attributesFor($this->selectedVertical);
+    }
+
+    /**
+     * The single vertical targeted by a category/vertical pair, if exactly one.
+     */
+    protected function resolveVertical(string $category, string $vertical): ?Vertical
+    {
+        if (filled($vertical)) {
+            return Vertical::where('slug', $vertical)->where('is_active', true)->first();
         }
 
-        if (filled($this->category)) {
-            $categoryModel = Category::where('slug', $this->category)->where('is_active', true)->first();
+        if (filled($category)) {
+            $categoryModel = Category::where('slug', $category)->where('is_active', true)->first();
             if ($categoryModel) {
                 $categoryIds = $this->getCategoryAndDescendantIds($categoryModel);
                 $verticals = Vertical::whereIn('category_id', $categoryIds)->where('is_active', true)->get();
@@ -221,14 +257,10 @@ new #[Layout('layouts.storefront')] #[Title('Browse Products')] class extends Co
     }
 
     /**
-     * Returns variant attributes to show only when exactly ONE vertical is selected.
-     *
      * @return Collection<int, mixed>
      */
-    #[Computed]
-    public function dynamicAttributes(): Collection
+    protected function attributesFor(?Vertical $vertical): Collection
     {
-        $vertical = $this->selectedVertical;
         if (! $vertical) {
             return collect();
         }
@@ -237,6 +269,173 @@ new #[Layout('layouts.storefront')] #[Title('Browse Products')] class extends Co
             ->where('is_variant', true)
             ->orderBy('sort_order')
             ->get();
+    }
+
+    /**
+     * Sort options, shared by the desktop select and the mobile sort sheet.
+     *
+     * @return array<string, string>
+     */
+    #[Computed]
+    public function sortOptions(): array
+    {
+        return [
+            'featured' => $this->searchResult ? 'Relevance' : 'Featured',
+            'price_asc' => 'Price: Low to High',
+            'price_desc' => 'Price: High to Low',
+            'discount_desc' => 'Biggest Discount',
+            'newest' => 'Newest Arrivals',
+        ];
+    }
+
+    /**
+     * Price presets in rupees, shared by the desktop sidebar and the mobile filter sheet.
+     *
+     * @return array<int, array{label: string, min: int, max: ?int}>
+     */
+    #[Computed]
+    public function pricePresets(): array
+    {
+        return [
+            ['label' => 'Under ₹500', 'min' => 0, 'max' => 500],
+            ['label' => '₹500 - ₹1,000', 'min' => 500, 'max' => 1000],
+            ['label' => '₹1,000 - ₹2,500', 'min' => 1000, 'max' => 2500],
+            ['label' => '₹2,500 - ₹5,000', 'min' => 2500, 'max' => 5000],
+            ['label' => 'Above ₹5,000', 'min' => 5000, 'max' => null],
+        ];
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    #[Computed]
+    public function discountPresets(): array
+    {
+        return [10, 20, 30, 50];
+    }
+
+    /**
+     * Number of active filters, shown on the mobile Filter button.
+     */
+    #[Computed]
+    public function activeFilterCount(): int
+    {
+        $filters = $this->normalizeFilters($this->filterState());
+
+        return (int) filled($filters['category'])
+            + (int) filled($filters['vertical'])
+            + count($filters['brands'])
+            + (int) (filled($filters['min_price']) || filled($filters['max_price']))
+            + (int) filled($filters['min_discount'])
+            + (int) $filters['in_stock']
+            + array_sum(array_map('count', $filters['attrs']));
+    }
+
+    /**
+     * Mobile filter sheet: product count and variant filters for a draft,
+     * without applying it (no re-render, URL unchanged).
+     *
+     * @param  array<string, mixed>  $filters
+     * @return array{count: int, attributes: array<int, array{code: string, name: string, options: array<int, array{value: string, label: string}>}>}
+     */
+    #[Renderless]
+    public function previewFilters(array $filters): array
+    {
+        $filters = $this->normalizeFilters($filters);
+        $vertical = $this->resolveVertical($filters['category'], $filters['vertical']);
+
+        return [
+            'count' => $this->filteredQuery($filters)->count(),
+            'attributes' => $this->attributesFor($vertical)
+                ->map(fn ($attr) => [
+                    'code' => (string) $attr->code,
+                    'name' => (string) $attr->name,
+                    'options' => collect($attr->options ?? [])
+                        ->filter(fn ($opt) => $opt['is_active'] ?? true)
+                        ->map(fn ($opt) => ['value' => (string) $opt['value'], 'label' => (string) $opt['label']])
+                        ->values()
+                        ->all(),
+                ])
+                ->values()
+                ->all(),
+        ];
+    }
+
+    /**
+     * Mobile filter sheet: apply a draft in one request.
+     *
+     * @param  array<string, mixed>  $filters
+     */
+    public function applyFilters(array $filters): void
+    {
+        $filters = $this->normalizeFilters($filters);
+
+        $this->category = $filters['category'];
+        $this->vertical = $filters['vertical'];
+        $this->brands = $filters['brands'];
+        $this->min_price = $filters['min_price'];
+        $this->max_price = $filters['max_price'];
+        $this->min_discount = $filters['min_discount'];
+        $this->in_stock = $filters['in_stock'];
+        $this->attrs = $filters['attrs'];
+        $this->resetPage();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function filterState(): array
+    {
+        return [
+            'category' => $this->category,
+            'vertical' => $this->vertical,
+            'brands' => $this->brands,
+            'min_price' => $this->min_price,
+            'max_price' => $this->max_price,
+            'min_discount' => $this->min_discount,
+            'in_stock' => $this->in_stock,
+            'attrs' => $this->attrs,
+        ];
+    }
+
+    /**
+     * Coerce filters (from the URL or the mobile sheet) into a known shape.
+     * Attribute codes and values are checked against the vertical later.
+     *
+     * @param  array<string, mixed>  $input
+     * @return array{category: string, vertical: string, brands: array<int, string>, min_price: ?string, max_price: ?string, min_discount: ?string, in_stock: bool, attrs: array<string, array<int, string>>}
+     */
+    protected function normalizeFilters(array $input): array
+    {
+        $text = fn ($value) => is_string($value) ? trim($value) : '';
+        $amount = fn ($value) => (is_string($value) || is_int($value) || is_float($value)) && is_numeric($value) && (float) $value >= 0
+            ? (string) $value
+            : null;
+        $list = fn ($values) => array_values(array_unique(array_filter(
+            array_map($text, array_slice(is_array($values) ? $values : [], 0, 50)),
+            fn (string $value) => $value !== '',
+        )));
+
+        $attrs = [];
+        foreach (array_slice(is_array($input['attrs'] ?? null) ? $input['attrs'] : [], 0, 10, true) as $code => $values) {
+            $values = array_slice($list($values), 0, 10);
+            if (is_string($code) && $values !== []) {
+                $attrs[$code] = $values;
+            }
+        }
+
+        $discount = $amount($input['min_discount'] ?? null);
+
+        return [
+            'category' => $text($input['category'] ?? ''),
+            'vertical' => $text($input['vertical'] ?? ''),
+            'brands' => $list($input['brands'] ?? []),
+            'min_price' => $amount($input['min_price'] ?? null),
+            'max_price' => $amount($input['max_price'] ?? null),
+            'min_discount' => $discount !== null && (float) $discount > 0 ? $discount : null,
+            'in_stock' => filter_var($input['in_stock'] ?? false, FILTER_VALIDATE_BOOLEAN),
+            'attrs' => $attrs,
+        ];
     }
 
     /**
@@ -262,10 +461,32 @@ new #[Layout('layouts.storefront')] #[Title('Browse Products')] class extends Co
     #[Computed]
     public function availableBrands(): Collection
     {
+        $searchResult = $this->searchResult;
+
         return Brand::where('status', BrandStatus::Approved)
-            ->whereHas('products', fn ($q) => $q->where('qc_status', ProductQcStatus::Approved)->whereNotNull('buy_box_listing_id'))
+            ->whereHas('products', function ($q) use ($searchResult) {
+                $q->where('qc_status', ProductQcStatus::Approved)->whereNotNull('buy_box_listing_id');
+
+                // While searching, only offer brands that have matching products
+                if ($searchResult) {
+                    $q->whereIntegerInRaw('products.id', $searchResult->productIds);
+                }
+            })
             ->orderBy('name')
             ->get();
+    }
+
+    /**
+     * Search matches for the query (ordered product IDs), or null when not searching.
+     */
+    #[Computed]
+    public function searchResult(): ?SearchResult
+    {
+        if (blank(trim($this->q))) {
+            return null;
+        }
+
+        return app(ProductSearchInterface::class)->search($this->q);
     }
 
     /**
@@ -274,9 +495,7 @@ new #[Layout('layouts.storefront')] #[Title('Browse Products')] class extends Co
     #[Computed]
     public function products(): LengthAwarePaginator
     {
-        $query = Product::query()
-            ->where('qc_status', ProductQcStatus::Approved)
-            ->whereNotNull('buy_box_listing_id')
+        $query = $this->filteredQuery($this->normalizeFilters($this->filterState()))
             ->with([
                 'brand',
                 'images' => fn ($q) => $q->where('status', ProductImageStatus::Live)->orderBy('sort_order'),
@@ -284,11 +503,67 @@ new #[Layout('layouts.storefront')] #[Title('Browse Products')] class extends Co
                 'buyBoxListing.variant',
             ]);
 
+        $searchResult = $this->searchResult;
+
+        // 7. Sorting (always sort in_stock items first, then chosen sort)
+        $sortWhitelist = [
+            'price_asc' => function (Builder $q) {
+                $q->orderByDesc('in_stock')->orderBy('min_price', 'asc')->orderByDesc('id');
+            },
+            'price_desc' => function (Builder $q) {
+                $q->orderByDesc('in_stock')->orderBy('min_price', 'desc')->orderByDesc('id');
+            },
+            'discount_desc' => function (Builder $q) {
+                $q->orderByDesc('in_stock')->orderByDesc('discount_percent')->orderByDesc('id');
+            },
+            'newest' => function (Builder $q) {
+                $q->orderByDesc('in_stock')->orderByDesc('id');
+            },
+            'featured' => function (Builder $q) use ($searchResult) {
+                $q->orderByDesc('in_stock');
+
+                // While searching, "featured" is relevance: the engine's order
+                if ($searchResult && ! $searchResult->isEmpty()) {
+                    $positions = collect($searchResult->productIds)
+                        ->map(fn (int $id, int $position) => 'WHEN '.(int) $id.' THEN '.$position)
+                        ->implode(' ');
+                    $q->orderByRaw("CASE id {$positions} END");
+                }
+
+                $q->orderByDesc('id');
+            },
+        ];
+
+        $sortHandler = $sortWhitelist[$this->sort] ?? $sortWhitelist['featured'];
+        $sortHandler($query);
+
+        return $query->paginate(16);
+    }
+
+    /**
+     * Listed products matching the search and the given filters (no sorting or eager loads).
+     * Used by the product grid and by the mobile filter sheet's live count.
+     *
+     * @param  array{category: string, vertical: string, brands: array<int, string>, min_price: ?string, max_price: ?string, min_discount: ?string, in_stock: bool, attrs: array<string, array<int, string>>}  $filters
+     * @return Builder<Product>
+     */
+    protected function filteredQuery(array $filters): Builder
+    {
+        $query = Product::query()
+            ->where('qc_status', ProductQcStatus::Approved)
+            ->whereNotNull('buy_box_listing_id');
+
+        // 0. Search: restrict to matches (price, stock and filters below stay live from the database)
+        $searchResult = $this->searchResult;
+        if ($searchResult) {
+            $query->whereIntegerInRaw('id', $searchResult->productIds);
+        }
+
         // 1. Category & Vertical Filter
-        if (filled($this->vertical)) {
-            $query->whereHas('vertical', fn ($q) => $q->where('slug', $this->vertical));
-        } elseif (filled($this->category)) {
-            $categoryModel = Category::where('slug', $this->category)->where('is_active', true)->first();
+        if (filled($filters['vertical'])) {
+            $query->whereHas('vertical', fn ($q) => $q->where('slug', $filters['vertical']));
+        } elseif (filled($filters['category'])) {
+            $categoryModel = Category::where('slug', $filters['category'])->where('is_active', true)->first();
             if ($categoryModel) {
                 $categoryIds = $this->getCategoryAndDescendantIds($categoryModel);
                 $query->whereHas('vertical', fn ($q) => $q->whereIn('category_id', $categoryIds));
@@ -296,22 +571,21 @@ new #[Layout('layouts.storefront')] #[Title('Browse Products')] class extends Co
         }
 
         // 2. Brands Filter
-        $selectedBrands = array_values(array_filter($this->brands, fn ($b) => filled($b)));
-        if (! empty($selectedBrands)) {
-            $query->whereHas('brand', fn ($q) => $q->whereIn('slug', $selectedBrands));
+        if ($filters['brands'] !== []) {
+            $query->whereHas('brand', fn ($q) => $q->whereIn('slug', $filters['brands']));
         }
 
         // 3. In Stock Filter (if checked, hide out of stock; otherwise show both)
-        if ($this->in_stock) {
+        if ($filters['in_stock']) {
             $query->where('in_stock', true);
         }
 
         // 4. Price Filter (converted to paise in one place)
-        $minPaise = is_numeric($this->min_price) && (float) $this->min_price > 0
-            ? (int) round((float) $this->min_price * 100)
+        $minPaise = $filters['min_price'] !== null && (float) $filters['min_price'] > 0
+            ? (int) round((float) $filters['min_price'] * 100)
             : null;
-        $maxPaise = is_numeric($this->max_price) && (float) $this->max_price > 0
-            ? (int) round((float) $this->max_price * 100)
+        $maxPaise = $filters['max_price'] !== null && (float) $filters['max_price'] > 0
+            ? (int) round((float) $filters['max_price'] * 100)
             : null;
 
         if ($minPaise !== null) {
@@ -322,14 +596,14 @@ new #[Layout('layouts.storefront')] #[Title('Browse Products')] class extends Co
         }
 
         // 5. Discount Filter
-        if (filled($this->min_discount) && is_numeric($this->min_discount)) {
-            $query->where('discount_percent', '>=', (int) $this->min_discount);
+        if ($filters['min_discount'] !== null) {
+            $query->where('discount_percent', '>=', (int) $filters['min_discount']);
         }
 
         // 6. Dynamic Variant Attribute Filters
-        $vertical = $this->selectedVertical;
-        if ($vertical && ! empty($this->attrs)) {
-            $sanitizedAttrs = $this->sanitizeAttributeFilters($this->attrs, $vertical);
+        $vertical = $this->resolveVertical($filters['category'], $filters['vertical']);
+        if ($vertical && $filters['attrs'] !== []) {
+            $sanitizedAttrs = $this->sanitizeAttributeFilters($filters['attrs'], $vertical);
 
             if (! empty($sanitizedAttrs)) {
                 $query->whereHas('variants', function (Builder $variantQuery) use ($sanitizedAttrs) {
@@ -355,29 +629,7 @@ new #[Layout('layouts.storefront')] #[Title('Browse Products')] class extends Co
             }
         }
 
-        // 7. Sorting (always sort in_stock items first, then chosen sort)
-        $sortWhitelist = [
-            'price_asc' => function (Builder $q) {
-                $q->orderByDesc('in_stock')->orderBy('min_price', 'asc')->orderByDesc('id');
-            },
-            'price_desc' => function (Builder $q) {
-                $q->orderByDesc('in_stock')->orderBy('min_price', 'desc')->orderByDesc('id');
-            },
-            'discount_desc' => function (Builder $q) {
-                $q->orderByDesc('in_stock')->orderByDesc('discount_percent')->orderByDesc('id');
-            },
-            'newest' => function (Builder $q) {
-                $q->orderByDesc('in_stock')->orderByDesc('id');
-            },
-            'featured' => function (Builder $q) {
-                $q->orderByDesc('in_stock')->orderByDesc('id');
-            },
-        ];
-
-        $sortHandler = $sortWhitelist[$this->sort] ?? $sortWhitelist['featured'];
-        $sortHandler($query);
-
-        return $query->paginate(16);
+        return $query;
     }
 
     /**
@@ -474,7 +726,136 @@ new #[Layout('layouts.storefront')] #[Title('Browse Products')] class extends Co
     }
 }; ?>
 
-<div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+{{--
+    Mobile sort and filter sheets (below lg). The filter sheet edits a local draft; only the live
+    count is fetched while editing (previewFilters, no re-render) and Apply sends it in one request.
+    Opening a sheet adds a history entry so the phone's back button closes it. That popstate is
+    handled in the capture phase and stopped, so Livewire's navigate and #[Url] listeners never see
+    it, and the action (apply/sort) runs only after the entry is popped, so its URL update lands on
+    the page's own history entry.
+--}}
+<div
+    class="mx-auto max-w-7xl px-4 pb-24 pt-6 sm:px-6 lg:px-8 lg:py-8"
+    x-data="{
+        sheet: null,
+        pushed: false,
+        pendingAction: null,
+        group: 'category',
+        draft: null,
+        count: null,
+        loading: false,
+        attributeGroups: [],
+        brandQuery: '',
+        previewTimer: null,
+        previewSeq: 0,
+        emptyDraft() {
+            return { category: '', vertical: '', brands: [], min_price: '', max_price: '', min_discount: '', in_stock: false, attrs: {} }
+        },
+        currentDraft() {
+            let attrs = this.$wire.attrs
+            return {
+                category: this.$wire.category || '',
+                vertical: this.$wire.vertical || '',
+                brands: [...(this.$wire.brands || [])],
+                min_price: this.$wire.min_price ?? '',
+                max_price: this.$wire.max_price ?? '',
+                min_discount: this.$wire.min_discount ?? '',
+                in_stock: !! this.$wire.in_stock,
+                attrs: Array.isArray(attrs) || ! attrs ? {} : JSON.parse(JSON.stringify(attrs)),
+            }
+        },
+        get draftKey() {
+            if (! this.draft) return ''
+            let attrs = Object.fromEntries(Object.entries(this.draft.attrs).filter(([code, values]) => values.length))
+            return JSON.stringify({ ...this.draft, attrs })
+        },
+        open(name) {
+            if (name === 'filters') {
+                this.draft = this.currentDraft()
+                this.brandQuery = ''
+                this.count = null
+                this.preview(0)
+            }
+            this.sheet = name
+            history.pushState({ productSheet: name }, '')
+            this.pushed = true
+        },
+        close(action = null) {
+            this.pendingAction = action
+            this.pushed ? history.back() : this.closed()
+        },
+        closed() {
+            let action = this.pendingAction
+            this.pushed = false
+            this.pendingAction = null
+            this.sheet = null
+            if (action) action()
+        },
+        onPopState(event) {
+            if (! this.pushed) return
+            event.stopImmediatePropagation()
+            this.closed()
+        },
+        preview(delay = 300) {
+            clearTimeout(this.previewTimer)
+            this.previewTimer = setTimeout(() => {
+                let seq = ++this.previewSeq
+                this.loading = true
+                this.$wire.previewFilters(this.draft).then((result) => {
+                    if (seq !== this.previewSeq || ! this.draft) return
+                    let codes = result.attributes.map((group) => group.code)
+                    Object.keys(this.draft.attrs).forEach((code) => codes.includes(code) || delete this.draft.attrs[code])
+                    codes.forEach((code) => Array.isArray(this.draft.attrs[code]) || (this.draft.attrs[code] = []))
+                    this.attributeGroups = result.attributes
+                    if (! ['category', 'price', 'discount', 'brand', 'availability'].includes(this.group) && ! codes.includes(this.group)) {
+                        this.group = 'category'
+                    }
+                    this.count = result.count
+                    this.loading = false
+                })
+            }, delay)
+        },
+        pickCategory(slug) {
+            this.draft.category = this.draft.category === slug ? '' : slug
+            this.draft.vertical = ''
+            this.draft.attrs = {}
+        },
+        pickVertical(slug) {
+            this.draft.vertical = this.draft.vertical === slug ? '' : slug
+            this.draft.attrs = {}
+        },
+        isPrice(min, max) {
+            return String(this.draft.min_price ?? '') === String(min ?? '') && String(this.draft.max_price ?? '') === String(max ?? '')
+        },
+        pickPrice(min, max) {
+            let same = this.isPrice(min, max)
+            this.draft.min_price = same ? '' : String(min ?? '')
+            this.draft.max_price = same ? '' : String(max ?? '')
+        },
+        pickDiscount(value) {
+            this.draft.min_discount = String(this.draft.min_discount ?? '') === String(value ?? '') ? '' : String(value ?? '')
+        },
+        groupCount(name) {
+            let d = this.draft
+            if (! d) return 0
+            if (name === 'category') return (d.category ? 1 : 0) + (d.vertical ? 1 : 0)
+            if (name === 'price') return (d.min_price !== '' && d.min_price !== null) || (d.max_price !== '' && d.max_price !== null) ? 1 : 0
+            if (name === 'discount') return d.min_discount ? 1 : 0
+            if (name === 'brand') return d.brands.length
+            if (name === 'availability') return d.in_stock ? 1 : 0
+            return (d.attrs[name] || []).length
+        },
+        apply() {
+            let draft = JSON.parse(JSON.stringify(this.draft))
+            this.close(() => this.$wire.applyFilters(draft))
+        },
+        sortBy(value) {
+            this.close(() => this.$wire.set('sort', value))
+        },
+    }"
+    x-init="$watch('draftKey', () => sheet === 'filters' && preview())"
+    x-on:popstate.window.capture="onPopState($event)"
+>
     <!-- Breadcrumb & Top Section -->
     <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-zinc-200 pb-5 dark:border-zinc-800">
         <div>
@@ -490,7 +871,9 @@ new #[Layout('layouts.storefront')] #[Title('Browse Products')] class extends Co
                 @endif
             </nav>
             <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">
-                @if ($vertical)
+                @if ($this->searchResult)
+                    Results for "{{ $this->searchResult->query }}"
+                @elseif ($vertical)
                     {{ ucwords(str_replace('-', ' ', $vertical)) }}
                 @elseif ($category)
                     {{ ucwords(str_replace('-', ' ', $category)) }}
@@ -499,21 +882,28 @@ new #[Layout('layouts.storefront')] #[Title('Browse Products')] class extends Co
                 @endif
                 <span class="ml-2 text-sm font-normal text-zinc-500 dark:text-zinc-400">({{ $this->products->total() }} items)</span>
             </h1>
+            @if ($this->searchResult)
+                <button
+                    type="button"
+                    wire:click="clearSearch"
+                    class="mt-1 text-xs font-semibold text-amber-600 hover:text-amber-700 dark:text-amber-400 underline"
+                >
+                    Clear search
+                </button>
+            @endif
         </div>
 
-        <!-- Sort Control -->
-        <div class="flex items-center gap-3">
+        <!-- Sort Control (desktop; phones use the sort sheet) -->
+        <div class="hidden items-center gap-3 lg:flex">
             <label for="sort-select" class="text-xs font-medium text-zinc-600 dark:text-zinc-400 whitespace-nowrap">Sort by:</label>
             <select
                 id="sort-select"
                 wire:model.live="sort"
                 class="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-800 shadow-xs focus:border-amber-500 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
             >
-                <option value="featured">Featured</option>
-                <option value="price_asc">Price: Low to High</option>
-                <option value="price_desc">Price: High to Low</option>
-                <option value="discount_desc">Biggest Discount</option>
-                <option value="newest">Newest Arrivals</option>
+                @foreach ($this->sortOptions as $value => $label)
+                    <option value="{{ $value }}">{{ $label }}</option>
+                @endforeach
             </select>
         </div>
     </div>
@@ -524,8 +914,9 @@ new #[Layout('layouts.storefront')] #[Title('Browse Products')] class extends Co
     @endphp
 
     @if ($hasActiveFilters)
-        <div class="mb-6 flex flex-wrap items-center gap-2">
-            <span class="text-xs font-medium text-zinc-500 dark:text-zinc-400">Active filters:</span>
+        {{-- One swipeable row on phones, wrapping on desktop --}}
+        <div class="-mx-4 mb-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 sm:-mx-6 sm:px-6 lg:mx-0 lg:mb-6 lg:flex-wrap lg:overflow-visible lg:px-0 lg:pb-0 [&>*]:shrink-0 [&>*]:whitespace-nowrap">
+            <span class="hidden text-xs font-medium text-zinc-500 lg:inline dark:text-zinc-400">Active filters:</span>
 
             @if ($category)
                 <button
@@ -609,8 +1000,8 @@ new #[Layout('layouts.storefront')] #[Title('Browse Products')] class extends Co
     @endif
 
     <div class="grid grid-cols-1 gap-8 lg:grid-cols-4">
-        <!-- Sidebar Filters -->
-        <aside class="space-y-6">
+        <!-- Sidebar Filters (desktop; phones and tablets use the filter sheet) -->
+        <aside class="hidden space-y-6 lg:block">
             <!-- Categories Filter -->
             <div class="rounded-xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
                 <h3 class="text-sm font-semibold tracking-tight text-zinc-900 dark:text-white uppercase mb-3">Categories</h3>
@@ -679,41 +1070,15 @@ new #[Layout('layouts.storefront')] #[Title('Browse Products')] class extends Co
 
                 <!-- Presets -->
                 <div class="space-y-1.5 text-xs mb-4">
-                    <button
-                        type="button"
-                        wire:click="setPricePreset(0, 500)"
-                        class="block w-full text-left px-2 py-1 rounded-md {{ $min_price === '0' && $max_price === '500' ? 'bg-amber-50 text-amber-700 font-medium dark:bg-amber-950 dark:text-amber-300' : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800' }}"
-                    >
-                        Under ₹500
-                    </button>
-                    <button
-                        type="button"
-                        wire:click="setPricePreset(500, 1000)"
-                        class="block w-full text-left px-2 py-1 rounded-md {{ $min_price === '500' && $max_price === '1000' ? 'bg-amber-50 text-amber-700 font-medium dark:bg-amber-950 dark:text-amber-300' : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800' }}"
-                    >
-                        ₹500 - ₹1,000
-                    </button>
-                    <button
-                        type="button"
-                        wire:click="setPricePreset(1000, 2500)"
-                        class="block w-full text-left px-2 py-1 rounded-md {{ $min_price === '1000' && $max_price === '2500' ? 'bg-amber-50 text-amber-700 font-medium dark:bg-amber-950 dark:text-amber-300' : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800' }}"
-                    >
-                        ₹1,000 - ₹2,500
-                    </button>
-                    <button
-                        type="button"
-                        wire:click="setPricePreset(2500, 5000)"
-                        class="block w-full text-left px-2 py-1 rounded-md {{ $min_price === '2500' && $max_price === '5000' ? 'bg-amber-50 text-amber-700 font-medium dark:bg-amber-950 dark:text-amber-300' : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800' }}"
-                    >
-                        ₹2,500 - ₹5,000
-                    </button>
-                    <button
-                        type="button"
-                        wire:click="setPricePreset(5000, null)"
-                        class="block w-full text-left px-2 py-1 rounded-md {{ $min_price === '5000' && $max_price === null ? 'bg-amber-50 text-amber-700 font-medium dark:bg-amber-950 dark:text-amber-300' : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800' }}"
-                    >
-                        Above ₹5,000
-                    </button>
+                    @foreach ($this->pricePresets as $preset)
+                        <button
+                            type="button"
+                            wire:click="setPricePreset({{ $preset['min'] }}, {{ $preset['max'] ?? 'null' }})"
+                            class="block w-full text-left px-2 py-1 rounded-md {{ $min_price === (string) $preset['min'] && $max_price === ($preset['max'] !== null ? (string) $preset['max'] : null) ? 'bg-amber-50 text-amber-700 font-medium dark:bg-amber-950 dark:text-amber-300' : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800' }}"
+                        >
+                            {{ $preset['label'] }}
+                        </button>
+                    @endforeach
                 </div>
 
                 <!-- Custom Inputs (In Rupees) -->
@@ -754,7 +1119,7 @@ new #[Layout('layouts.storefront')] #[Title('Browse Products')] class extends Co
                     >
                         All Discounts
                     </button>
-                    @foreach ([10, 20, 30, 50] as $disc)
+                    @foreach ($this->discountPresets as $disc)
                         <button
                             type="button"
                             wire:click="setDiscountPreset({{ $disc }})"
@@ -845,20 +1210,34 @@ new #[Layout('layouts.storefront')] #[Title('Browse Products')] class extends Co
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
                         </svg>
                     </div>
-                    <h3 class="text-base font-semibold text-zinc-900 dark:text-white">No products found</h3>
-                    <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400 max-w-sm">
-                        We couldn't find any products matching your current combination of filters. Try clearing some filters.
-                    </p>
-                    <button
-                        type="button"
-                        wire:click="resetFilters"
-                        class="mt-4 inline-flex items-center rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white shadow-xs hover:bg-amber-600 transition"
-                    >
-                        Clear all filters
-                    </button>
+                    @if ($this->searchResult && ! $hasActiveFilters)
+                        <h3 class="text-base font-semibold text-zinc-900 dark:text-white">No results for "{{ $this->searchResult->query }}"</h3>
+                        <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400 max-w-sm">
+                            Check the spelling or try a more general word.
+                        </p>
+                        <button
+                            type="button"
+                            wire:click="clearSearch"
+                            class="mt-4 inline-flex items-center rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white shadow-xs hover:bg-amber-600 transition"
+                        >
+                            Browse all products
+                        </button>
+                    @else
+                        <h3 class="text-base font-semibold text-zinc-900 dark:text-white">No products found</h3>
+                        <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400 max-w-sm">
+                            We couldn't find any products matching your current combination of filters. Try clearing some filters.
+                        </p>
+                        <button
+                            type="button"
+                            wire:click="resetFilters"
+                            class="mt-4 inline-flex items-center rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white shadow-xs hover:bg-amber-600 transition"
+                        >
+                            Clear all filters
+                        </button>
+                    @endif
                 </div>
             @else
-                <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-6 lg:grid-cols-3 xl:grid-cols-4">
                     @foreach ($this->products as $product)
                         @php
                             $primaryImg = $product->images->first(fn ($img) => $img->is_primary && $img->status === ProductImageStatus::Live)
@@ -885,7 +1264,7 @@ new #[Layout('layouts.storefront')] #[Title('Browse Products')] class extends Co
                                     />
 
                                     <!-- Badges -->
-                                    <div class="absolute top-2.5 left-2.5 flex flex-col gap-1 items-start">
+                                    <div class="absolute top-2 left-2 flex flex-col gap-1 items-start sm:top-2.5 sm:left-2.5">
                                         @if (! $product->in_stock)
                                             <span class="inline-flex items-center rounded-md bg-zinc-900/90 px-2 py-0.5 text-[11px] font-semibold text-white backdrop-blur-xs">
                                                 Out of stock
@@ -899,14 +1278,14 @@ new #[Layout('layouts.storefront')] #[Title('Browse Products')] class extends Co
                                 </div>
 
                                 <!-- Card Content -->
-                                <div class="flex flex-1 flex-col p-4">
+                                <div class="flex flex-1 flex-col p-2.5 sm:p-4">
                                     <!-- Brand Name -->
-                                    <p class="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">
+                                    <p class="truncate text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1 sm:text-[11px]">
                                         {{ $product->brand?->name ?? 'Brand' }}
                                     </p>
 
                                     <!-- Product Title -->
-                                    <h2 class="text-sm font-medium text-zinc-900 dark:text-white line-clamp-2 leading-snug group-hover:text-amber-600 dark:group-hover:text-amber-400 transition mb-2">
+                                    <h2 class="text-[13px] font-medium text-zinc-900 dark:text-white line-clamp-2 leading-snug group-hover:text-amber-600 dark:group-hover:text-amber-400 transition mb-2 sm:text-sm">
                                         {{ $product->title }}
                                     </h2>
 
@@ -920,14 +1299,14 @@ new #[Layout('layouts.storefront')] #[Title('Browse Products')] class extends Co
 
                                     <!-- Sold By Merchant -->
                                     @if ($buyBox?->sellerProfile)
-                                        <p class="text-[11px] text-zinc-500 dark:text-zinc-400 mb-3 truncate">
+                                        <p class="hidden text-[11px] text-zinc-500 dark:text-zinc-400 mb-3 truncate sm:block">
                                             Sold by: <span class="font-medium text-zinc-700 dark:text-zinc-300">{{ $buyBox->sellerProfile->store_name }}</span>
                                         </p>
                                     @endif
 
                                     <!-- Price Container -->
-                                    <div class="mt-auto flex items-baseline gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
-                                        <span class="text-lg font-bold text-zinc-900 dark:text-white">
+                                    <div class="mt-auto flex flex-wrap items-baseline gap-x-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                                        <span class="text-base font-bold text-zinc-900 dark:text-white sm:text-lg">
                                             ₹{{ number_format((int) $product->min_price / 100) }}
                                         </span>
                                         @if ($product->buy_box_mrp && $product->buy_box_mrp > $product->min_price)
@@ -948,5 +1327,266 @@ new #[Layout('layouts.storefront')] #[Title('Browse Products')] class extends Co
                 </div>
             @endif
         </main>
+    </div>
+
+    <!-- Mobile Sort | Filter bar -->
+    <div class="fixed inset-x-0 bottom-0 z-30 grid grid-cols-2 border-t border-zinc-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden dark:border-zinc-800 dark:bg-zinc-900/95">
+        <button
+            type="button"
+            x-on:click="open('sort')"
+            aria-haspopup="dialog"
+            class="flex items-center justify-center gap-2 py-3.5 text-sm font-semibold text-zinc-800 dark:text-zinc-100"
+        >
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 7.5L7.5 3m0 0L12 7.5M7.5 3v13.5m13.5 0L16.5 21m0 0L12 16.5m4.5 4.5V7.5" />
+            </svg>
+            <span>Sort</span>
+        </button>
+        <button
+            type="button"
+            x-on:click="open('filters')"
+            aria-haspopup="dialog"
+            class="flex items-center justify-center gap-2 border-l border-zinc-200 py-3.5 text-sm font-semibold text-zinc-800 dark:border-zinc-800 dark:text-zinc-100"
+        >
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
+            </svg>
+            <span>Filter</span>
+            @if ($this->activeFilterCount > 0)
+                <span class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-xs font-bold text-white">{{ $this->activeFilterCount }}</span>
+            @endif
+        </button>
+    </div>
+
+    <!-- Mobile Sort Sheet -->
+    <div
+        x-show="sheet === 'sort'"
+        style="display: none"
+        class="fixed inset-0 z-50 lg:hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sort-sheet-title"
+    >
+        <div class="absolute inset-0 bg-black/50" x-on:click="close()" x-show="sheet === 'sort'" x-transition.opacity></div>
+        <div
+            x-show="sheet === 'sort'"
+            x-trap.noscroll="sheet === 'sort'"
+            x-transition:enter="transition ease-out duration-200"
+            x-transition:enter-start="translate-y-full"
+            x-transition:enter-end="translate-y-0"
+            x-transition:leave="transition ease-in duration-150"
+            x-transition:leave-start="translate-y-0"
+            x-transition:leave-end="translate-y-full"
+            class="absolute inset-x-0 bottom-0 rounded-t-2xl bg-white pb-[env(safe-area-inset-bottom)] shadow-xl dark:bg-zinc-900"
+        >
+            <div class="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+                <h2 id="sort-sheet-title" class="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Sort by</h2>
+                <button type="button" x-on:click="close()" class="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800" aria-label="Close sort">
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <ul class="py-1">
+                @foreach ($this->sortOptions as $value => $label)
+                    <li>
+                        <button
+                            type="button"
+                            x-on:click="sortBy(@js($value))"
+                            class="flex w-full items-center justify-between px-4 py-3.5 text-left text-sm {{ $sort === $value ? 'font-semibold text-amber-600 dark:text-amber-400' : 'text-zinc-800 dark:text-zinc-200' }}"
+                        >
+                            <span>{{ $label }}</span>
+                            <span class="flex h-5 w-5 items-center justify-center rounded-full border-2 {{ $sort === $value ? 'border-amber-500' : 'border-zinc-300 dark:border-zinc-600' }}">
+                                @if ($sort === $value)
+                                    <span class="h-2.5 w-2.5 rounded-full bg-amber-500"></span>
+                                @endif
+                            </span>
+                        </button>
+                    </li>
+                @endforeach
+            </ul>
+        </div>
+    </div>
+
+    <!-- Mobile Filter Sheet -->
+    <div
+        x-show="sheet === 'filters'"
+        x-trap.noscroll="sheet === 'filters'"
+        x-transition.opacity.duration.150ms
+        style="display: none"
+        class="fixed inset-0 z-50 flex flex-col bg-white lg:hidden dark:bg-zinc-950"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="filter-sheet-title"
+    >
+        <template x-if="draft">
+            <div class="flex h-full flex-col">
+                <!-- Sheet header -->
+                <div class="flex items-center justify-between border-b border-zinc-200 px-2 py-2 dark:border-zinc-800">
+                    <div class="flex items-center gap-1">
+                        <button type="button" x-on:click="close()" class="rounded-lg p-2 text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800" aria-label="Close filters">
+                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+                            </svg>
+                        </button>
+                        <h2 id="filter-sheet-title" class="text-base font-semibold text-zinc-900 dark:text-white">Filters</h2>
+                    </div>
+                    <button type="button" x-on:click="draft = emptyDraft()" class="px-3 py-2 text-sm font-semibold text-amber-600 dark:text-amber-400">
+                        Clear all
+                    </button>
+                </div>
+
+                <!-- Two panes: groups | options -->
+                <div class="flex min-h-0 flex-1">
+                    <nav class="w-32 shrink-0 overflow-y-auto bg-zinc-100 dark:bg-zinc-900" aria-label="Filter groups">
+                        @php
+                            $sheetGroups = ['category' => 'Category', 'price' => 'Price', 'discount' => 'Discount', 'brand' => 'Brand', 'availability' => 'Availability'];
+                        @endphp
+                        @foreach ($sheetGroups as $groupKey => $groupLabel)
+                            <button
+                                type="button"
+                                x-on:click="group = @js($groupKey)"
+                                x-bind:class="group === @js($groupKey) ? 'border-amber-500 bg-white font-semibold text-zinc-900 dark:bg-zinc-950 dark:text-white' : 'border-transparent text-zinc-600 dark:text-zinc-400'"
+                                class="flex w-full items-center justify-between gap-1 border-l-4 px-3 py-3.5 text-left text-sm"
+                            >
+                                <span>{{ $groupLabel }}</span>
+                                <span x-show="groupCount(@js($groupKey))" x-text="groupCount(@js($groupKey))" class="rounded-full bg-amber-500 px-1.5 text-[11px] font-bold text-white"></span>
+                            </button>
+                        @endforeach
+                        <template x-for="attr in attributeGroups" :key="attr.code">
+                            <button
+                                type="button"
+                                x-on:click="group = attr.code"
+                                x-bind:class="group === attr.code ? 'border-amber-500 bg-white font-semibold text-zinc-900 dark:bg-zinc-950 dark:text-white' : 'border-transparent text-zinc-600 dark:text-zinc-400'"
+                                class="flex w-full items-center justify-between gap-1 border-l-4 px-3 py-3.5 text-left text-sm"
+                            >
+                                <span x-text="attr.name"></span>
+                                <span x-show="groupCount(attr.code)" x-text="groupCount(attr.code)" class="rounded-full bg-amber-500 px-1.5 text-[11px] font-bold text-white"></span>
+                            </button>
+                        </template>
+                    </nav>
+
+                    <div class="min-w-0 flex-1 overflow-y-auto px-4 py-3 text-sm">
+                        <!-- Category -->
+                        <div x-show="group === 'category'" class="space-y-3">
+                            @foreach ($this->rootCategories as $cat)
+                                <div>
+                                    <button
+                                        type="button"
+                                        x-on:click="pickCategory(@js($cat->slug))"
+                                        x-bind:class="draft.category === @js($cat->slug) && ! draft.vertical ? 'text-amber-600 dark:text-amber-400' : 'text-zinc-900 dark:text-zinc-100'"
+                                        class="w-full py-1.5 text-left font-semibold"
+                                    >
+                                        {{ $cat->name }}
+                                    </button>
+                                    <div class="mt-1 space-y-0.5 border-l border-zinc-200 pl-3 dark:border-zinc-800">
+                                        @foreach ($cat->children->flatMap->verticals->concat($cat->verticals) as $v)
+                                            <button
+                                                type="button"
+                                                x-on:click="pickVertical(@js($v->slug))"
+                                                x-bind:class="draft.vertical === @js($v->slug) ? 'font-semibold text-amber-600 dark:text-amber-400' : 'text-zinc-600 dark:text-zinc-400'"
+                                                class="block w-full py-1.5 text-left"
+                                            >
+                                                {{ $v->name }}
+                                            </button>
+                                        @endforeach
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+
+                        <!-- Price -->
+                        <div x-show="group === 'price'" class="space-y-1">
+                            @foreach ($this->pricePresets as $preset)
+                                <button
+                                    type="button"
+                                    x-on:click="pickPrice({{ $preset['min'] }}, {{ $preset['max'] ?? 'null' }})"
+                                    x-bind:class="isPrice({{ $preset['min'] }}, {{ $preset['max'] ?? 'null' }}) ? 'bg-amber-50 font-semibold text-amber-700 dark:bg-amber-950 dark:text-amber-300' : 'text-zinc-700 dark:text-zinc-300'"
+                                    class="block w-full rounded-lg px-3 py-2.5 text-left"
+                                >
+                                    {{ $preset['label'] }}
+                                </button>
+                            @endforeach
+                            <div class="grid grid-cols-2 gap-2 pt-3">
+                                <label class="text-xs text-zinc-500 dark:text-zinc-400">
+                                    Min (₹)
+                                    <input type="number" inputmode="numeric" min="0" placeholder="0" x-model.debounce.400ms="draft.min_price" class="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" />
+                                </label>
+                                <label class="text-xs text-zinc-500 dark:text-zinc-400">
+                                    Max (₹)
+                                    <input type="number" inputmode="numeric" min="0" placeholder="Any" x-model.debounce.400ms="draft.max_price" class="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" />
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Discount -->
+                        <div x-show="group === 'discount'" class="space-y-1">
+                            @foreach ($this->discountPresets as $disc)
+                                <button
+                                    type="button"
+                                    x-on:click="pickDiscount({{ $disc }})"
+                                    x-bind:class="String(draft.min_discount) === '{{ $disc }}' ? 'bg-amber-50 font-semibold text-amber-700 dark:bg-amber-950 dark:text-amber-300' : 'text-zinc-700 dark:text-zinc-300'"
+                                    class="block w-full rounded-lg px-3 py-2.5 text-left"
+                                >
+                                    {{ $disc }}% or more
+                                </button>
+                            @endforeach
+                        </div>
+
+                        <!-- Brand -->
+                        <div x-show="group === 'brand'">
+                            @if ($this->availableBrands->count() > 8)
+                                <input type="search" x-model="brandQuery" placeholder="Search brands" aria-label="Search brands" class="mb-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" />
+                            @endif
+                            @foreach ($this->availableBrands as $brandModel)
+                                <label
+                                    x-show="! brandQuery || @js(mb_strtolower($brandModel->name)).includes(brandQuery.toLowerCase())"
+                                    class="flex items-center gap-3 py-2.5 text-zinc-800 dark:text-zinc-200"
+                                >
+                                    <input type="checkbox" value="{{ $brandModel->slug }}" x-model="draft.brands" class="h-4 w-4 rounded border-zinc-300 text-amber-600 focus:ring-amber-500 dark:border-zinc-700 dark:bg-zinc-800" />
+                                    <span>{{ $brandModel->name }}</span>
+                                </label>
+                            @endforeach
+                        </div>
+
+                        <!-- Availability -->
+                        <div x-show="group === 'availability'">
+                            <label class="flex items-center gap-3 py-2.5 text-zinc-800 dark:text-zinc-200">
+                                <input type="checkbox" x-model="draft.in_stock" class="h-4 w-4 rounded border-zinc-300 text-amber-600 focus:ring-amber-500 dark:border-zinc-700 dark:bg-zinc-800" />
+                                <span>Exclude out of stock items</span>
+                            </label>
+                        </div>
+
+                        <!-- Variant attributes for the drafted vertical -->
+                        <template x-for="attr in attributeGroups" :key="attr.code">
+                            <div x-show="group === attr.code">
+                                <template x-for="opt in attr.options" :key="opt.value">
+                                    <label class="flex items-center gap-3 py-2.5 text-zinc-800 dark:text-zinc-200">
+                                        <input type="checkbox" x-bind:value="opt.value" x-model="draft.attrs[attr.code]" class="h-4 w-4 rounded border-zinc-300 text-amber-600 focus:ring-amber-500 dark:border-zinc-700 dark:bg-zinc-800" />
+                                        <span x-text="opt.label"></span>
+                                    </label>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Sheet footer: live count + Apply -->
+                <div class="flex items-center gap-3 border-t border-zinc-200 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] dark:border-zinc-800">
+                    <div class="min-w-0 flex-1">
+                        <p class="text-base font-bold text-zinc-900 dark:text-white" x-text="count === null ? '…' : count.toLocaleString('en-IN')"></p>
+                        <p class="text-xs text-zinc-500 dark:text-zinc-400" x-text="count === 1 ? 'product found' : 'products found'"></p>
+                    </div>
+                    <button
+                        type="button"
+                        x-on:click="apply()"
+                        x-bind:disabled="loading && count === null"
+                        class="flex-1 rounded-lg bg-amber-500 px-4 py-3 text-sm font-semibold text-white shadow-xs hover:bg-amber-600 disabled:opacity-60"
+                    >
+                        Apply
+                    </button>
+                </div>
+            </div>
+        </template>
     </div>
 </div>

@@ -9,6 +9,7 @@ use App\Enums\VariantQcStatus;
 use App\Models\Listing;
 use App\Models\Product;
 use App\Models\ProductVariant;
+use App\Search\Contracts\SearchIndexerInterface;
 use Illuminate\Database\Eloquent\Builder;
 
 class ProductBuyBoxService
@@ -132,6 +133,9 @@ class ProductBuyBoxService
                 'in_stock' => false,
             ])->saveQuietly();
         }
+
+        // Saved quietly above, so model events never see buy-box changes: reindex explicitly.
+        app(SearchIndexerInterface::class)->queue($productModel->id);
     }
 
     /**
