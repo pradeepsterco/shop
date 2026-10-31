@@ -11,6 +11,7 @@ use App\Enums\VariantQcStatus;
 use App\Models\Listing;
 use App\Models\Product;
 use App\Models\ProductVariant;
+use App\SEO\SeoData;
 use App\Services\CartService;
 use App\Services\ProductBuyBoxService;
 use Livewire\Attributes\Computed;
@@ -21,10 +22,25 @@ new #[Layout('layouts.storefront')] class extends Component {
     public string $slug;
     public string $upid;
 
-    public function mount(string $slug, string $upid): void
+    public function mount(string $slug, string $upid)
     {
         $this->slug = $slug;
         $this->upid = $upid;
+
+        // Slug-mismatch check: if UPID belongs to an approved variant whose product has a different slug, 301 redirect to canonical URL
+        $variant = ProductVariant::where('upid', $this->upid)
+            ->where('qc_status', VariantQcStatus::Approved)
+            ->with('product')
+            ->first();
+
+        if ($variant && $variant->product && $variant->product->qc_status === ProductQcStatus::Approved) {
+            if ($variant->product->slug !== $this->slug) {
+                abort(redirect()->to(route('product.show', [
+                    'slug' => $variant->product->slug,
+                    'upid' => $variant->upid,
+                ]), 301));
+            }
+        }
 
         if (! $this->product || ! $this->currentVariant) {
             abort(404, 'Product or variant not found');
@@ -173,6 +189,36 @@ new #[Layout('layouts.storefront')] class extends Component {
         }
 
         return $matrix;
+    }
+
+    #[Computed]
+    public function seo(): SeoData
+    {
+        $brand = $this->product?->brand?->name;
+        $title = $this->product ? ($brand ? "{$this->product->title} | {$brand}" : $this->product->title) : 'Product';
+
+        $desc = $this->product?->description;
+        if (blank($desc) && ! empty($this->product?->highlights)) {
+            $desc = implode('. ', (array) $this->product->highlights);
+        }
+
+        $canonical = ($this->product && $this->currentVariant)
+            ? route('product.show', ['slug' => $this->product->slug, 'upid' => $this->currentVariant->upid])
+            : null;
+
+        $img = $this->currentVariant?->images->first(fn ($i) => $i->status === ProductImageStatus::Live)
+            ?? $this->product?->images->first(fn ($i) => $i->is_primary && $i->status === ProductImageStatus::Live)
+            ?? $this->product?->images->first(fn ($i) => $i->status === ProductImageStatus::Live);
+
+        return SeoData::make(
+            title: $title,
+            description: $desc,
+            canonical: $canonical,
+            robots: 'index, follow, max-image-preview:large',
+            ogType: 'product',
+            ogImage: $img?->url(),
+            ogImageAlt: $this->product?->title,
+        );
     }
 
     #[Computed]

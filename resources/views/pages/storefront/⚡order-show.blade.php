@@ -15,7 +15,7 @@ use Livewire\Attributes\Title;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 
-new #[Layout('layouts.app')] #[Title('Order Details')] class extends Component {
+new #[Layout('layouts.app', ['seo' => new \App\SEO\SeoData(title: 'Order Details', robots: 'noindex, follow')])] class extends Component {
     use WithFileUploads;
 
     public string $orderNumber;

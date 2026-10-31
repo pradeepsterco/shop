@@ -7,7 +7,7 @@ use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
-new #[Layout('layouts.storefront')] class extends Component {
+new #[Layout('layouts.storefront', ['seo' => new \App\SEO\SeoData(title: 'Order Placed', robots: 'noindex, follow')])] class extends Component {
     public string $orderNumber;
 
     public function mount(string $order): void

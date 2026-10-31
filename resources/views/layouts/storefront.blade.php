@@ -5,13 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
-    <title>{{ filled($title ?? null) ? $title.' - '.brand_name() : brand_name() }}</title>
+    <x-seo-head :seo="$seo ?? null" />
 
     <x-brand.favicon />
 
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
     @fonts
+    @stack('preload')
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @include('partials.theme-script')
+    @stack('schema')
 </head>
 <body class="min-h-screen bg-zinc-50 font-sans text-zinc-900 antialiased selection:bg-amber-500 selection:text-white dark:bg-zinc-950 dark:text-zinc-100">
     <!-- Storefront Header Navigation -->

@@ -6,12 +6,12 @@ use App\Content\Enums\PageStatus;
 use App\Content\Enums\PageType;
 use App\Content\Models\ContentPage;
 use App\Content\Services\PageResolver;
+use App\SEO\SeoData;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
-use Livewire\Attributes\Title;
 use Livewire\Component;
 
-new #[Layout('layouts.storefront')] #[Title('Home')] class extends Component {
+new #[Layout('layouts.storefront')] class extends Component {
     #[Computed]
     public function page()
     {
@@ -30,6 +30,35 @@ new #[Layout('layouts.storefront')] #[Title('Home')] class extends Component {
         }
 
         return app(PageResolver::class)->resolve($page, 'storefront');
+    }
+
+    #[Computed]
+    public function seo(): SeoData
+    {
+        $resolved = $this->resolvedPage;
+        $title = $resolved?->seoTitle ?: ($resolved?->title ?: 'Home');
+        $desc = $resolved?->seoDescription ?: 'Discover verified sellers and premium marketplace deals with fast delivery and buyer protection.';
+
+        $ogImage = null;
+        if ($resolved) {
+            foreach ($resolved->sections as $sec) {
+                foreach ($sec->items as $it) {
+                    if ($it->desktopMedia?->url) {
+                        $ogImage = $it->desktopMedia->url;
+                        break 2;
+                    }
+                }
+            }
+        }
+
+        return SeoData::make(
+            title: $title,
+            description: $desc,
+            canonical: url('/'),
+            robots: 'index, follow, max-image-preview:large',
+            ogType: 'website',
+            ogImage: $ogImage,
+        );
     }
 }; ?>
 

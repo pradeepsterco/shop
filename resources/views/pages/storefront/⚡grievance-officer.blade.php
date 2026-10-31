@@ -3,12 +3,12 @@
 namespace App\Livewire\Storefront;
 
 use App\Helpdesk\Services\GrievanceOfficerService;
+use App\SEO\SeoData;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
-use Livewire\Attributes\Title;
 use Livewire\Component;
 
-new #[Layout('layouts.storefront')] #[Title('Grievance Officer')] class extends Component {
+new #[Layout('layouts.storefront')] class extends Component {
     /**
      * @return array<string, string|null>
      */
@@ -22,6 +22,19 @@ new #[Layout('layouts.storefront')] #[Title('Grievance Officer')] class extends 
     public function configured(): bool
     {
         return app(GrievanceOfficerService::class)->isConfigured();
+    }
+
+    #[Computed]
+    public function seo(): SeoData
+    {
+        $brand = function_exists('brand_name') ? brand_name() : 'Marketplace';
+
+        return SeoData::make(
+            title: 'Grievance Officer',
+            description: "Grievance Officer and consumer protection compliance details for {$brand}.",
+            canonical: route('grievance-officer'),
+            robots: 'index, follow, max-image-preview:large',
+        );
     }
 }; ?>
 

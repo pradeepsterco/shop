@@ -64,6 +64,23 @@ class AppServiceProvider extends ServiceProvider
             EnsureUserPasswordChanged::class,
             EnsureUserIsApprovedSeller::class,
         ]);
+
+        Livewire::listen('render', function ($component): void {
+            if (method_exists($component, 'seo')) {
+                try {
+                    $seo = $component->seo();
+                    if ($seo instanceof \App\SEO\SeoData || is_array($seo)) {
+                        view()->share('seo', $seo);
+                    }
+                } catch (\Throwable) {
+                }
+            } elseif (isset($component->seo)) {
+                $seo = $component->seo;
+                if ($seo instanceof \App\SEO\SeoData || is_array($seo)) {
+                    view()->share('seo', $seo);
+                }
+            }
+        });
     }
 
     /**

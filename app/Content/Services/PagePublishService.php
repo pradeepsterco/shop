@@ -155,6 +155,7 @@ class PagePublishService
     public function clearCache(string $slug): void
     {
         Cache::forget("content.page.{$slug}.published");
+        \App\Http\Controllers\SitemapController::clearPagesCache();
     }
 
     /**

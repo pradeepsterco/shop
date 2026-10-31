@@ -14,7 +14,7 @@ use Livewire\Attributes\Title;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 
-new #[Layout('layouts.app')] #[Title('Support Request')] class extends Component {
+new #[Layout('layouts.app', ['seo' => new \App\SEO\SeoData(title: 'Support Request', robots: 'noindex, follow')])] class extends Component {
     use WithFileUploads;
 
     public string $ticketNumber;

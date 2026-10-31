@@ -1,9 +1,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-<title>
-    {{ filled($title ?? null) ? $title.' - '.brand_name() : brand_name() }}
-</title>
+<x-seo-head :seo="$seo ?? null" />
 
 <x-brand.favicon />
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">

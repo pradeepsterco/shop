@@ -8,7 +8,7 @@ use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
-new #[Layout('layouts.storefront')] class extends Component {
+new #[Layout('layouts.storefront', ['seo' => new \App\SEO\SeoData(title: 'My Cart', robots: 'noindex, follow')])] class extends Component {
     #[Computed]
     public function cartView(): array
     {

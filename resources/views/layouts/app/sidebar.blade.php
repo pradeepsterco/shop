@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
     <head>
-        @include('partials.head')
+        @include('partials.head', ['seo' => $seo ?? ($title ? new \App\SEO\SeoData(title: $title, robots: 'noindex, follow') : new \App\SEO\SeoData(title: 'Dashboard', robots: 'noindex, follow'))])
     </head>
     <body class="min-h-screen bg-zinc-100 font-sans text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100">
         @php

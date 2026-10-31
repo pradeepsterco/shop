@@ -15,7 +15,7 @@ use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
-new #[Layout('layouts.storefront')] class extends Component {
+new #[Layout('layouts.storefront', ['seo' => new \App\SEO\SeoData(title: 'Checkout', robots: 'noindex, follow')])] class extends Component {
     public const STATES = CustomerAddressRules::STATES;
 
     public string $intentId;

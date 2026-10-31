@@ -136,6 +136,7 @@ class ProductBuyBoxService
 
         // Saved quietly above, so model events never see buy-box changes: reindex explicitly.
         app(SearchIndexerInterface::class)->queue($productModel->id);
+        \App\Http\Controllers\SitemapController::clearProductsCache();
     }
 
     /**

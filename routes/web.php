@@ -2,9 +2,20 @@
 
 use App\Checkout\Services\CheckoutIntentService;
 use App\Helpdesk\Http\Controllers\TicketAttachmentController;
+use App\Http\Controllers\RobotsController;
+use App\Http\Controllers\SitemapController;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+
+Route::get('robots.txt', RobotsController::class)->name('robots');
+Route::get('sitemap.xml', [SitemapController::class, 'index'])->name('sitemap.index');
+Route::get('sitemap-pages.xml', [SitemapController::class, 'pages'])->name('sitemap.pages');
+Route::get('sitemap-categories.xml', [SitemapController::class, 'categories'])->name('sitemap.categories');
+Route::get('sitemap-sellers.xml', [SitemapController::class, 'sellers'])->name('sitemap.sellers');
+Route::get('sitemap-products-{chunk}.xml', [SitemapController::class, 'products'])
+    ->whereNumber('chunk')
+    ->name('sitemap.products');
 
 Route::livewire('/', 'pages::storefront.home-page')->name('home');
 Route::livewire('pages/{slug}', 'pages::storefront.static-page')->name('content.page');

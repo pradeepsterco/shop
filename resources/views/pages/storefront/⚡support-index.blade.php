@@ -12,7 +12,7 @@ use Livewire\Attributes\Title;
 use Livewire\Component;
 use Livewire\WithPagination;
 
-new #[Layout('layouts.app')] #[Title('Help & Support')] class extends Component {
+new #[Layout('layouts.app', ['seo' => new \App\SEO\SeoData(title: 'Help & Support', robots: 'noindex, follow')])] class extends Component {
     use WithPagination;
 
     #[Computed]

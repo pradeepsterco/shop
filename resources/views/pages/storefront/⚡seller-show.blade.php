@@ -6,16 +6,16 @@ use App\Enums\SellerStatus;
 use App\Models\SellerProfile;
 use App\Reviews\Enums\ReviewStatus;
 use App\Reviews\Models\ProductReview;
+use App\SEO\SeoData;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
-use Livewire\Attributes\Title;
 use Livewire\Component;
 
 /**
  * Seller details customers can see before and after buying, as the Consumer Protection (E-Commerce) Rules, 2020
  * require of a marketplace: business name, address, rating. Customers still contact the marketplace, not the seller.
  */
-new #[Layout('layouts.storefront')] #[Title('Seller Details')] class extends Component {
+new #[Layout('layouts.storefront')] class extends Component {
     public string $slug;
 
     public function mount(string $slug): void
@@ -46,6 +46,23 @@ new #[Layout('layouts.storefront')] #[Title('Seller Details')] class extends Com
             ->first();
 
         return ['average' => round((float) ($stats->average ?? 0), 1), 'count' => (int) ($stats->total ?? 0)];
+    }
+
+    #[Computed]
+    public function seo(): SeoData
+    {
+        $seller = $this->seller;
+        $title = $seller ? $seller->store_name : 'Seller Details';
+        $brand = function_exists('brand_name') ? brand_name() : 'Marketplace';
+        $desc = $seller ? "Verified seller {$seller->store_name} on {$brand}. View merchant ratings, contact details and business information." : null;
+
+        return SeoData::make(
+            title: $title,
+            description: $desc,
+            canonical: $seller ? route('sellers.show', ['slug' => $seller->store_slug]) : null,
+            robots: 'index, follow, max-image-preview:large',
+            ogType: 'profile',
+        );
     }
 }; ?>
 

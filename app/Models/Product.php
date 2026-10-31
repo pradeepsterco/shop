@@ -114,15 +114,20 @@ class Product extends Model
 
         static::saved(function (Product $product) {
             if ($product->wasChanged('qc_status')) {
-                // Also reindexes search.
+                // Also reindexes search and clears sitemap cache.
                 app(ProductBuyBoxService::class)->refresh($product);
             } elseif ($product->wasChanged(['title', 'slug', 'highlights', 'specs', 'brand_id', 'vertical_id'])) {
                 app(SearchIndexerInterface::class)->queue($product->id);
+            }
+
+            if ($product->wasChanged(['qc_status', 'slug', 'buy_box_listing_id'])) {
+                \App\Http\Controllers\SitemapController::clearProductsCache();
             }
         });
 
         static::deleted(function (Product $product) {
             app(SearchIndexerInterface::class)->queue($product->id);
+            \App\Http\Controllers\SitemapController::clearProductsCache();
         });
     }
 

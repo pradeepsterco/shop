@@ -14,7 +14,7 @@ use Livewire\Attributes\Url;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 
-new #[Layout('layouts.app')] #[Title('New Support Request')] class extends Component {
+new #[Layout('layouts.app', ['seo' => new \App\SEO\SeoData(title: 'New Support Request', robots: 'noindex, follow')])] class extends Component {
     use WithFileUploads;
 
     #[Url(as: 'order')]

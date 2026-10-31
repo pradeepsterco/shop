@@ -353,6 +353,11 @@ class SellerProfile extends Model
             $profile->deleteFiles();
         });
 
+        static::deleted(function () {
+            \App\Http\Controllers\SitemapController::clearSellersCache();
+            \App\Http\Controllers\SitemapController::clearProductsCache();
+        });
+
         static::saved(function (SellerProfile $seller) {
             if ($seller->wasChanged('status')) {
                 $productIds = DB::table('listings')
@@ -365,6 +370,11 @@ class SellerProfile extends Model
                 foreach ($productIds as $pId) {
                     $service->refresh($pId);
                 }
+            }
+
+            if ($seller->wasChanged(['status', 'store_slug'])) {
+                \App\Http\Controllers\SitemapController::clearSellersCache();
+                \App\Http\Controllers\SitemapController::clearProductsCache();
             }
         });
     }

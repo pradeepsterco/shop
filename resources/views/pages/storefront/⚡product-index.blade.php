@@ -14,6 +14,7 @@ use App\Models\Product;
 use App\Models\Vertical;
 use App\Search\Contracts\ProductSearchInterface;
 use App\Search\DTOs\SearchResult;
+use App\SEO\SeoData;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -25,7 +26,7 @@ use Livewire\Attributes\Url;
 use Livewire\Component;
 use Livewire\WithPagination;
 
-new #[Layout('layouts.storefront')] #[Title('Browse Products')] class extends Component {
+new #[Layout('layouts.storefront')] class extends Component {
     use WithPagination;
 
     #[Url(except: '')]
@@ -723,6 +724,50 @@ new #[Layout('layouts.storefront')] #[Title('Browse Products')] class extends Co
         }
 
         return $sanitized;
+    }
+
+    #[Computed]
+    public function seo(): SeoData
+    {
+        $isFilteredOrSorted = filled($this->q)
+            || ! empty($this->brands)
+            || filled($this->min_price)
+            || filled($this->max_price)
+            || filled($this->min_discount)
+            || $this->in_stock
+            || ! empty($this->attrs)
+            || ($this->sort !== 'featured')
+            || ($this->getPage() > 1);
+
+        $robots = $isFilteredOrSorted ? 'noindex, follow' : 'index, follow, max-image-preview:large';
+
+        $title = 'Browse Products';
+        $canonical = route('products.index');
+        $desc = 'Explore curated products from trusted independent sellers with fast delivery and verified buyer protection.';
+
+        if (filled($this->vertical)) {
+            $vert = Vertical::where('slug', $this->vertical)->first();
+            if ($vert) {
+                $title = $vert->name;
+                $canonical = route('products.index', ['vertical' => $vert->slug]);
+                $desc = "Shop {$vert->name} online. Discover premium selections and verified seller deals.";
+            }
+        } elseif (filled($this->category)) {
+            $cat = Category::where('slug', $this->category)->first();
+            if ($cat) {
+                $title = $cat->name;
+                $canonical = route('products.index', ['category' => $cat->slug]);
+                $desc = "Shop {$cat->name} online. Browse verified deals, wide selections, and fast delivery.";
+            }
+        }
+
+        return SeoData::make(
+            title: $title,
+            description: $desc,
+            canonical: $canonical,
+            robots: $robots,
+            ogType: 'website',
+        );
     }
 }; ?>
 
