@@ -575,6 +575,9 @@ test('activity log records product QC approve and reject', function () {
         'brand_id' => $brand->id,
         'title' => 'Building Blocks Set',
         'description' => '500 piece blocks',
+        'generic_name' => 'Building blocks',
+        'net_quantity' => 500,
+        'net_quantity_unit' => 'count',
         'created_by' => $seller->id,
         'qc_status' => ProductQcStatus::QcPending,
     ]);

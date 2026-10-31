@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Checkout\Models\CheckoutIntent;
 use App\Enums\BrandStatus;
 use App\Enums\ListingStatus;
+use App\Enums\NetQuantityUnit;
 use App\Enums\ProductImageStatus;
 use App\Enums\ProductQcStatus;
 use App\Enums\SellerStatus;
@@ -413,6 +414,9 @@ class MarketplaceDemoSeeder extends Seeder
                         'brand_id' => $itemData['brand']->id,
                         'title' => $itemData['title'],
                         'description' => "High quality {$itemData['title']} supplied by {$creatorSeller->store_name}.",
+                        'generic_name' => $vert->name,
+                        'net_quantity' => 1,
+                        'net_quantity_unit' => NetQuantityUnit::Count,
                         'qc_status' => ProductQcStatus::Approved,
                         'created_by' => $creatorSeller->user_id,
                     ]

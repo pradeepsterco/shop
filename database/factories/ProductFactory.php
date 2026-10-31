@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Enums\BrandStatus;
+use App\Enums\NetQuantityUnit;
 use App\Enums\ProductQcStatus;
 use App\Models\Brand;
 use App\Models\Category;
@@ -39,6 +40,9 @@ class ProductFactory extends Factory
             'description' => fake()->paragraph(),
             'highlights' => [fake()->sentence(), fake()->sentence()],
             'specs' => [],
+            'generic_name' => 'Toy',
+            'net_quantity' => 1,
+            'net_quantity_unit' => NetQuantityUnit::Count,
             'created_by' => null,
             'qc_status' => ProductQcStatus::Approved,
             'qc_notes' => null,

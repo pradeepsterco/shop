@@ -461,7 +461,9 @@ new #[Layout('layouts.admin')] #[Title('Review Seller Application')] class exten
                 <dl class="mt-4 space-y-3 text-xs">
                     <div><span class="text-zinc-500">Store Name:</span> <span class="font-medium text-zinc-900 dark:text-white">{{ $sellerProfile->isAnonymized() ? 'Deleted seller' : $sellerProfile->store_name }}</span></div>
                     <div><span class="text-zinc-500">Store Slug:</span> <span class="font-medium text-zinc-900 dark:text-white">/stores/{{ $sellerProfile->store_slug }}</span></div>
+                    <div><span class="text-zinc-500">Registered Business Name:</span> <span class="font-medium text-zinc-900 dark:text-white">{{ $sellerProfile->isAnonymized() ? 'Deleted seller' : ($sellerProfile->legal_name ?: 'Not provided yet') }}</span></div>
                     <div><span class="text-zinc-500">Business Type:</span> <span class="font-medium capitalize text-zinc-900 dark:text-white">{{ $sellerProfile->business_type }}</span></div>
+                    <div><span class="text-zinc-500">Declaration:</span> <span class="font-medium text-zinc-900 dark:text-white">{{ $sellerProfile->declaration_accepted_at ? 'Accepted '.format_datetime($sellerProfile->declaration_accepted_at) : 'Not accepted yet' }}</span></div>
                     <div><span class="text-zinc-500">Description:</span> <span class="font-medium text-zinc-900 dark:text-white">{{ $sellerProfile->description ?: 'No description provided.' }}</span></div>
                     <div><span class="text-zinc-500">Support Email:</span> <span class="font-medium text-zinc-900 dark:text-white">{{ $sellerProfile->support_email }}</span></div>
                     <div><span class="text-zinc-500">Support Phone:</span> <span class="font-medium text-zinc-900 dark:text-white">{{ $sellerProfile->support_phone }}</span></div>

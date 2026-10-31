@@ -1,6 +1,8 @@
 <?php
 
 use App\Fees\Models\FeeSchedule;
+use App\Helpdesk\Enums\TicketCategory;
+use App\Helpdesk\Services\HelpdeskService;
 use App\Models\Admin;
 use App\Models\Category;
 use App\Models\SellerDocument;
@@ -64,6 +66,14 @@ function getRouteParam(string $routeName): array
                 ]);
             })(),
             'index' => 0,
+        ],
+        'admin.support.show' => [
+            'ticket' => app(HelpdeskService::class)->openCustomerTicket(
+                user: User::factory()->create(),
+                category: TicketCategory::Other,
+                subject: 'RBAC check ticket',
+                body: 'Checking the support route permissions.',
+            )->ticket_number,
         ],
         'admin.customers.show' => [
             'user' => User::factory()->create(),
@@ -207,6 +217,10 @@ dataset('admin_protected_routes', [
     ['admin.refunds.index', AdminPermissions::RETURNS_VIEW],
     ['admin.returns.request-photo', AdminPermissions::RETURNS_VIEW],
     ['admin.settings.branding', AdminPermissions::BRANDING_VIEW],
+    ['admin.support.index', AdminPermissions::SUPPORT_VIEW],
+    ['admin.support.show', AdminPermissions::SUPPORT_VIEW],
+    ['admin.support.settings', AdminPermissions::SUPPORT_SETTINGS],
+    ['admin.support.report', AdminPermissions::SUPPORT_VIEW],
 ]);
 
 test('admin route returns 403 when staff lacks required permission and 200 when granted', function (string $routeName, string $permission) {

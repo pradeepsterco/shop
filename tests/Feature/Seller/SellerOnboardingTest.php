@@ -48,6 +48,7 @@ test('wizard validates format of pan and ifsc on step 3', function () {
     Livewire::actingAs($user)
         ->test('pages::seller.onboarding')
         ->set('currentStep', 3)
+        ->set('legal_name', 'John Seller')
         ->set('pan', 'INVALID123')
         ->set('bank_account_holder', 'John Seller')
         ->set('bank_account_number', '1234567890')
@@ -67,6 +68,7 @@ test('wizard step 3 encrypts sensitive fields in database', function () {
     Livewire::actingAs($user)
         ->test('pages::seller.onboarding')
         ->set('currentStep', 3)
+        ->set('legal_name', 'Beneficiary Traders Private Limited')
         ->set('pan', 'ABCDE1234F')
         ->set('gstin', '27ABCDE1234F1Z5')
         ->set('bank_account_holder', 'John Beneficiary')
@@ -85,7 +87,8 @@ test('wizard step 3 encrypts sensitive fields in database', function () {
     // Verify model decrypts automatically
     $fresh = $profile->fresh();
     expect($fresh->pan)->toBe('ABCDE1234F')
-        ->and($fresh->bank_account_number)->toBe('987654321012');
+        ->and($fresh->bank_account_number)->toBe('987654321012')
+        ->and($fresh->legal_name)->toBe('Beneficiary Traders Private Limited');
 });
 
 test('wizard step 4 uploads documents to private disk and replacing deletes old file', function () {
@@ -155,7 +158,8 @@ test('submitting wizard requires terms and sets status to pending', function () 
 
     $fresh = $profile->fresh();
     expect($fresh->status)->toBe(SellerStatus::Pending)
-        ->and($fresh->submitted_at)->not->toBeNull();
+        ->and($fresh->submitted_at)->not->toBeNull()
+        ->and($fresh->declaration_accepted_at)->not->toBeNull();
 });
 
 test('wizard resumes at saved current_step', function () {

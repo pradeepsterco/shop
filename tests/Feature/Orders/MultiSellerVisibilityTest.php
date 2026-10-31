@@ -196,9 +196,9 @@ test('seller A list, detail page and email show only A items and totals, never B
         ->assertDontSee('SKU-BETA-DRONE')
         ->assertDontSee('Beta Hobby Shop')
         ->assertDontSee('₹5,497')
-        // Shows delivery address and phone for shipping
+        // Shows the name and address the shipping label needs; the phone goes to the courier only
         ->assertSee('Rahul Sharma')
-        ->assertSee('9876543210')
+        ->assertDontSee('9876543210')
         ->assertSee('42 Marine Lines')
         ->assertSee('Fort Area')
         ->assertSee('400001');

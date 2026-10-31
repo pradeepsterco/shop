@@ -421,6 +421,10 @@ new #[Layout('layouts.seller')] #[Title('Order Details')] class extends Componen
         </div>
 
         <div class="flex flex-wrap items-center gap-3">
+            <a href="{{ route('seller.support.create', ['order' => $sellerOrder->id]) }}" wire:navigate data-test="seller-order-help-link"
+               class="text-xs font-bold uppercase tracking-wider text-amber-600 hover:text-amber-700 dark:text-amber-400">
+                Need help with this order?
+            </a>
             <span class="inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-bold uppercase {{ $sellerOrder->status->value === 'cancelled' ? 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300' : 'bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300' }}">
                 Status: {{ $sellerOrder->status->label() }}
             </span>
@@ -1144,12 +1148,6 @@ new #[Layout('layouts.seller')] #[Title('Order Details')] class extends Componen
                 </h3>
                 <div class="text-xs text-zinc-700 dark:text-zinc-300 space-y-1">
                     <p class="font-bold text-zinc-900 dark:text-white">{{ $sellerOrder->order->delivery_address['name'] ?? 'Recipient' }}</p>
-                    <p class="text-zinc-800 dark:text-zinc-200">
-                        Phone: <strong class="text-zinc-900 dark:text-white">{{ $sellerOrder->order->delivery_address['phone'] ?? '' }}</strong>
-                        @if (! empty($sellerOrder->order->delivery_address['alternate_phone']))
-                            <span class="text-zinc-400"> / {{ $sellerOrder->order->delivery_address['alternate_phone'] }}</span>
-                        @endif
-                    </p>
                     <p class="text-zinc-600 dark:text-zinc-400 font-medium">{{ $sellerOrder->order->delivery_address['address_line'] ?? ($sellerOrder->order->delivery_address['line'] ?? '') }}</p>
                     @if (! empty($sellerOrder->order->delivery_address['locality']))
                         <p class="text-zinc-500">{{ $sellerOrder->order->delivery_address['locality'] }}</p>
@@ -1158,6 +1156,8 @@ new #[Layout('layouts.seller')] #[Title('Order Details')] class extends Componen
                         <p class="text-zinc-500">Landmark: {{ $sellerOrder->order->delivery_address['landmark'] }}</p>
                     @endif
                     <p class="text-zinc-500">{{ $sellerOrder->order->delivery_address['city'] ?? '' }}, {{ $sellerOrder->order->delivery_state }} - {{ $sellerOrder->order->delivery_address['pincode'] ?? '' }}</p>
+                    {{-- Customer contact numbers go to the courier only; questions go through marketplace support --}}
+                    <p data-test="customer-phone-hidden" class="pt-1 text-[11px] text-zinc-400">The customer's phone number is shared with the courier only. For questions about this order, contact {{ brand_name() }} Support.</p>
                 </div>
             </div>
         </div>

@@ -127,6 +127,8 @@ test('seller can create new product through 5-step wizard and submit to QC', fun
         ->set('description', 'High quality cotton everyday t-shirt with premium finish.')
         ->set('highlights', ['100% combed cotton', 'Regular fit'])
         ->set('specs.fabric', 'cotton')
+        ->set('generic_name', 'T-shirt')
+        ->set('net_quantity', '1')
         ->call('saveStep3')
         ->assertSet('currentStep', 4);
 

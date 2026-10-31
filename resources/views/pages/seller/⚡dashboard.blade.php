@@ -38,9 +38,69 @@ new #[Layout('layouts.seller')] #[Title('Seller Overview')] class extends Compon
             'stock' => \App\Models\Listing::where('seller_profile_id', $profile->id)->sum('stock'),
         ];
     }
+
+    /** Registered business name, asked of sellers who joined before it was collected. */
+    public string $legalName = '';
+
+    public bool $declarationAccepted = false;
+
+    /**
+     * Sellers approved before the legal name and declaration were collected confirm them here.
+     */
+    public function acceptDeclaration(): void
+    {
+        $profile = $this->sellerProfile;
+        if (! $profile) {
+            return;
+        }
+
+        $this->legalName = trim($this->legalName);
+        $this->validate([
+            'legalName' => [filled($profile->legal_name) ? 'nullable' : 'required', 'string', 'min:2', 'max:191'],
+            'declarationAccepted' => ['accepted'],
+        ], [
+            'legalName.required' => 'Enter your registered business name.',
+            'declarationAccepted.accepted' => 'Tick the declaration to continue.',
+        ]);
+
+        $profile->forceFill([
+            'legal_name' => filled($profile->legal_name) ? $profile->legal_name : $this->legalName,
+            'declaration_accepted_at' => now(),
+        ])->save();
+
+        unset($this->sellerProfile);
+        session()->flash('declaration_saved', 'Thank you. Your business details are confirmed.');
+    }
 }; ?>
 
 <div class="space-y-6">
+    @if (session()->has('declaration_saved'))
+        <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">{{ session('declaration_saved') }}</div>
+    @endif
+
+    @if ($this->sellerProfile && (blank($this->sellerProfile->legal_name) || ! $this->sellerProfile->declaration_accepted_at))
+        <form wire:submit="acceptDeclaration" data-test="seller-declaration-banner" class="space-y-3 rounded-2xl border border-amber-300 bg-amber-50 p-5 dark:border-amber-800 dark:bg-amber-950/30">
+            <div>
+                <h3 class="text-sm font-bold text-amber-900 dark:text-amber-200">Confirm your business details</h3>
+                <p class="mt-0.5 text-xs text-amber-800 dark:text-amber-300">Indian e-commerce rules require us to show customers your registered business name and to hold your declaration that your details are true.</p>
+            </div>
+            @if (blank($this->sellerProfile->legal_name))
+                <div>
+                    <label for="legalName" class="mb-1 block text-xs font-semibold text-amber-900 dark:text-amber-200">Registered business name</label>
+                    <input id="legalName" type="text" wire:model="legalName" maxlength="191" placeholder="As on your PAN or GST registration"
+                           class="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:outline-none dark:border-amber-800 dark:bg-zinc-900 dark:text-white sm:max-w-md" />
+                    @error('legalName') <p class="mt-1 text-xs text-rose-600 dark:text-rose-400">{{ $message }}</p> @enderror
+                </div>
+            @endif
+            <label class="flex items-start gap-2 text-xs text-amber-900 dark:text-amber-200">
+                <input type="checkbox" wire:model="declarationAccepted" class="mt-0.5 rounded border-amber-400">
+                <span>I declare that all the information and documents I have given {{ brand_name() }} are true and accurate, and I will keep them up to date.</span>
+            </label>
+            @error('declarationAccepted') <p class="text-xs text-rose-600 dark:text-rose-400">{{ $message }}</p> @enderror
+            <button type="submit" class="rounded-lg bg-amber-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-amber-700">Confirm</button>
+        </form>
+    @endif
+
     <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
             <h2 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white" data-test="seller-store-heading">

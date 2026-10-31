@@ -48,6 +48,8 @@ use Illuminate\Support\Str;
  * @property CarbonImmutable|null $reviewed_at
  * @property int|null $reviewed_by_admin_id
  * @property CarbonImmutable|null $bank_updated_at
+ * @property string|null $legal_name Registered business name shown to customers
+ * @property CarbonImmutable|null $declaration_accepted_at When the seller declared their details true
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  * @property-read User $user
@@ -93,6 +95,8 @@ class SellerProfile extends Model
         'reviewed_at',
         'reviewed_by_admin_id',
         'bank_updated_at',
+        'legal_name',
+        'declaration_accepted_at',
     ];
 
     /**
@@ -112,6 +116,7 @@ class SellerProfile extends Model
             'approved_at' => 'datetime',
             'reviewed_at' => 'datetime',
             'bank_updated_at' => 'datetime',
+            'declaration_accepted_at' => 'datetime',
         ];
     }
 

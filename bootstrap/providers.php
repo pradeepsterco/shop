@@ -5,6 +5,7 @@ use App\Catalog\CatalogServiceProvider;
 use App\Content\ContentServiceProvider;
 use App\Coupons\CouponsServiceProvider;
 use App\Fees\FeesServiceProvider;
+use App\Helpdesk\HelpdeskServiceProvider;
 use App\Orders\OrdersServiceProvider;
 use App\Providers\AppServiceProvider;
 use App\Providers\FortifyServiceProvider;
@@ -31,5 +32,6 @@ return [
     CouponsServiceProvider::class,
     ReviewsServiceProvider::class,
     SearchServiceProvider::class,
+    HelpdeskServiceProvider::class,
     ServiceProvider::class,
 ];

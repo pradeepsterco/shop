@@ -338,7 +338,7 @@ new #[Layout('layouts.storefront')] class extends Component {
                     @if ($listing?->sellerProfile)
                         <span class="text-xs text-zinc-500">&middot;</span>
                         <span class="text-xs text-zinc-500 dark:text-zinc-400">
-                            Sold by <strong class="text-zinc-800 dark:text-zinc-200">{{ $listing->sellerProfile->store_name }}</strong>
+                            Sold by <a href="{{ route('sellers.show', ['slug' => $listing->sellerProfile->store_slug]) }}" class="font-bold text-zinc-800 hover:underline dark:text-zinc-200">{{ $listing->sellerProfile->store_name }}</a>
                         </span>
                     @endif
                 </div>

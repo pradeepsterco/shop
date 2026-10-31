@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\ListingStatus;
+use App\Enums\NetQuantityUnit;
 use App\Enums\ProductQcStatus;
 use App\Enums\VariantQcStatus;
 use App\Models\Admin;
@@ -87,6 +88,12 @@ new #[Layout('layouts.admin')] #[Title('Product Catalog & QC Review')] class ext
         $issues = $product->variantIssues();
         if (! empty($issues) || $product->needs_update) {
             session()->flash('review_error', 'Cannot approve: product has variant integrity issues or is flagged as needing update.');
+
+            return;
+        }
+
+        if ($missing = $product->missingDeclarations()) {
+            session()->flash('review_error', 'Cannot approve: the seller has not given the product\'s '.implode(' and ', $missing).'. Reject with a note asking for it.');
 
             return;
         }
@@ -579,6 +586,40 @@ new #[Layout('layouts.admin')] #[Title('Product Catalog & QC Review')] class ext
                     </div>
                 </div>
 
+                <!-- Package declarations (Legal Metrology) -->
+                @php
+                    $pendingChanges = (array) $prod->pending_changes;
+                    $pendingNetQuantity = array_key_exists('net_quantity', $pendingChanges) || array_key_exists('net_quantity_unit', $pendingChanges)
+                        ? NetQuantityUnit::format($pendingChanges['net_quantity'] ?? $prod->net_quantity, NetQuantityUnit::tryFrom((string) ($pendingChanges['net_quantity_unit'] ?? $prod->net_quantity_unit?->value)))
+                        : null;
+                    $declarationRows = [
+                        'Generic name' => [$prod->generic_name, $pendingChanges['generic_name'] ?? null],
+                        'Net quantity' => [$prod->netQuantityLabel(), $pendingNetQuantity],
+                    ];
+                    $missingDeclarations = $prod->missingDeclarations();
+                @endphp
+                <div class="rounded-xl border p-4 text-xs {{ $missingDeclarations ? 'border-amber-300 bg-amber-50 dark:border-amber-900/60 dark:bg-amber-950/30' : 'border-zinc-200 dark:border-zinc-800' }}" data-test="qc-declarations">
+                    <h4 class="font-bold text-zinc-900 dark:text-white uppercase tracking-wider mb-2">Package Declarations</h4>
+                    <dl class="grid grid-cols-2 gap-2">
+                        @foreach ($declarationRows as $label => [$live, $pending])
+                            <div>
+                                <dt class="text-zinc-400">{{ $label }}</dt>
+                                <dd class="font-medium text-zinc-800 dark:text-zinc-200">
+                                    @if ($pending !== null && $pending !== $live)
+                                        <span class="text-zinc-400 line-through">{{ $live ?? 'Not given' }}</span>
+                                        <span class="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-amber-800 dark:bg-amber-950 dark:text-amber-300">Pending: {{ $pending }}</span>
+                                    @else
+                                        {{ $live ?? 'Not given' }}
+                                    @endif
+                                </dd>
+                            </div>
+                        @endforeach
+                    </dl>
+                    @if ($missingDeclarations)
+                        <p class="mt-2 font-medium text-amber-800 dark:text-amber-300">Missing {{ implode(' and ', $missingDeclarations) }}: approval is blocked until the seller adds it.</p>
+                    @endif
+                </div>
+
                 <!-- Variants & Listings Table -->
                 <div>
                     <h4 class="text-xs font-bold uppercase tracking-wider text-zinc-500 mb-2">
@@ -683,13 +724,13 @@ new #[Layout('layouts.admin')] #[Title('Product Catalog & QC Review')] class ext
                                     class="rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-xs font-semibold text-red-700 hover:bg-red-100 dark:border-red-900 dark:bg-red-950 dark:text-red-300 transition">
                                 Reject Product
                             </button>
-                            @if (empty($qcIssues))
+                            @if (empty($qcIssues) && empty($missingDeclarations))
                                 <button type="button" wire:click="approveProduct({{ $prod->id }})"
                                         class="rounded-lg bg-emerald-600 px-5 py-2 text-xs font-semibold text-white hover:bg-emerald-700 transition shadow-xs">
                                     Approve Product & Listings
                                 </button>
                             @else
-                                <button type="button" disabled title="Resolve variant issues before approving"
+                                <button type="button" disabled title="Resolve variant issues and missing declarations before approving"
                                         class="cursor-not-allowed rounded-lg bg-zinc-300 px-5 py-2 text-xs font-semibold text-zinc-500 dark:bg-zinc-800 dark:text-zinc-500">
                                     Approve Blocked (Has Issues)
                                 </button>

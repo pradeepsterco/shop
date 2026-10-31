@@ -16,7 +16,7 @@ new #[Layout('layouts.app')] #[Title('My Orders')] class extends Component {
     public function orders()
     {
         return auth()->user()->orders()
-            ->with(['sellerOrders.items'])
+            ->with(['sellerOrders.items', 'sellerOrders.sellerProfile:id,store_slug'])
             ->latest('placed_at')
             ->paginate(10);
     }
@@ -93,7 +93,12 @@ new #[Layout('layouts.app')] #[Title('My Orders')] class extends Component {
                                             {{ $item->title }}
                                         </h4>
                                         <p class="text-xs text-zinc-500 dark:text-zinc-400">
-                                            Qty: {{ $item->qty }} &middot; ₹{{ number_format($item->unit_price / 100) }} each &middot; Sold by {{ $sellerOrder->seller_store_name }}
+                                            Qty: {{ $item->qty }} &middot; ₹{{ number_format($item->unit_price / 100) }} each &middot; Sold by
+                                            @if ($sellerOrder->sellerProfile?->store_slug)
+                                                <a href="{{ route('sellers.show', ['slug' => $sellerOrder->sellerProfile->store_slug]) }}" class="hover:underline" wire:navigate>{{ $sellerOrder->seller_store_name }}</a>
+                                            @else
+                                                {{ $sellerOrder->seller_store_name }}
+                                            @endif
                                         </p>
                                     </div>
                                 </div>

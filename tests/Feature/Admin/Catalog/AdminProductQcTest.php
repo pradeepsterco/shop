@@ -72,6 +72,9 @@ test('admin can approve a product and its variants and activate seller listings'
         'brand_id' => $brand->id,
         'title' => 'SpeedRun Pro Sneaker',
         'description' => 'Comfortable running shoes with breathable mesh.',
+        'generic_name' => 'Sports shoes',
+        'net_quantity' => 1,
+        'net_quantity_unit' => 'pair',
         'created_by' => $seller->id,
         'qc_status' => ProductQcStatus::QcPending,
     ]);

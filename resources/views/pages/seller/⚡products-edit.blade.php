@@ -2,6 +2,7 @@
 
 use App\Enums\BrandStatus;
 use App\Enums\ListingStatus;
+use App\Enums\NetQuantityUnit;
 use App\Enums\ProductImageStatus;
 use App\Enums\ProductQcStatus;
 use App\Models\Brand;
@@ -12,6 +13,7 @@ use App\Models\SellerProfile;
 use App\Services\VariantOfferValidator;
 use App\Services\VariantSyncService;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -29,6 +31,9 @@ new #[Layout('layouts.seller')] #[Title('Edit Product')] class extends Component
     public array $highlights = [];
     public array $specs = [];
     public ?int $brand_id = null;
+    public string $generic_name = '';
+    public string $net_quantity = '';
+    public string $net_quantity_unit = 'count';
 
     // Listing fields (for each variant listed by this seller)
     public array $sellerListings = []; // [variant_id => [id, sku, mrp, selling_price, stock, status, variant_key]]
@@ -49,6 +54,14 @@ new #[Layout('layouts.seller')] #[Title('Edit Product')] class extends Component
             return;
         }
 
+        // Drafts are finished in the wizard, which runs the checks before QC; other sellers' drafts are not theirs to see
+        if ($product->qc_status === ProductQcStatus::Draft) {
+            abort_unless($product->created_by === $seller->id, 404);
+            $this->redirect(route('seller.products.create', ['draft' => $product->id]), navigate: true);
+
+            return;
+        }
+
         $this->product = $product->load(['vertical.attributes', 'brand', 'variants.listings', 'images']);
         $this->isCreator = ($this->product->created_by === $seller->id);
 
@@ -57,6 +70,13 @@ new #[Layout('layouts.seller')] #[Title('Edit Product')] class extends Component
         $this->highlights = ! empty($product->highlights) ? $product->highlights : [''];
         $this->specs = $product->specs ?? [];
         $this->brand_id = $product->brand_id;
+
+        // Declarations awaiting QC show their pending value, so the creator sees what they submitted
+        $pending = (array) $product->pending_changes;
+        $netQuantity = $pending['net_quantity'] ?? $product->net_quantity;
+        $this->generic_name = (string) ($pending['generic_name'] ?? $product->generic_name ?? '');
+        $this->net_quantity = $netQuantity !== null ? rtrim(rtrim(number_format((float) $netQuantity, 3, '.', ''), '0'), '.') : '';
+        $this->net_quantity_unit = (string) ($pending['net_quantity_unit'] ?? $product->net_quantity_unit->value ?? 'count');
 
         // Load seller's listings for this product's variants
         $this->loadSellerListings($seller->id);
@@ -139,7 +159,16 @@ new #[Layout('layouts.seller')] #[Title('Edit Product')] class extends Component
             'title' => ['required', 'string', 'min:5', 'max:255'],
             'description' => ['required', 'string', 'min:10', 'max:3000'],
             'brand_id' => ['required', 'exists:brands,id'],
+            'generic_name' => ['required', 'string', 'min:2', 'max:120'],
+            'net_quantity' => ['required', 'numeric', 'gt:0', 'max:9999999'],
+            'net_quantity_unit' => ['required', Rule::enum(NetQuantityUnit::class)],
         ]);
+
+        $declarations = [
+            'generic_name' => trim($this->generic_name),
+            'net_quantity' => $this->net_quantity,
+            'net_quantity_unit' => $this->net_quantity_unit,
+        ];
 
         $cleanHighlights = array_values(array_filter($this->highlights, fn ($h) => trim($h) !== ''));
 
@@ -167,6 +196,7 @@ new #[Layout('layouts.seller')] #[Title('Edit Product')] class extends Component
                     'highlights' => $cleanHighlights,
                     'specs' => $this->specs,
                     'brand_id' => $this->brand_id,
+                    ...$declarations,
                 ],
                 'qc_status' => ProductQcStatus::QcPending,
                 'qc_notes' => null,
@@ -181,6 +211,7 @@ new #[Layout('layouts.seller')] #[Title('Edit Product')] class extends Component
                 'highlights' => $cleanHighlights,
                 'specs' => $this->specs,
                 'brand_id' => $this->brand_id,
+                ...$declarations,
                 'qc_status' => ProductQcStatus::QcPending,
                 'qc_notes' => null,
             ]);
@@ -446,6 +477,31 @@ new #[Layout('layouts.seller')] #[Title('Edit Product')] class extends Component
                     <textarea wire:model="description" rows="3" required
                               class="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-xs text-zinc-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"></textarea>
                     @error('description') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                </div>
+
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <div>
+                        <label class="block text-xs font-medium text-zinc-700 dark:text-zinc-300">Generic Name *</label>
+                        <input wire:model="generic_name" type="text" required maxlength="120" placeholder="e.g. Action figure"
+                               class="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-xs text-zinc-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white" />
+                        @error('generic_name') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-zinc-700 dark:text-zinc-300">Net Quantity *</label>
+                        <input wire:model="net_quantity" type="number" step="any" min="0" required placeholder="e.g. 1"
+                               class="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-xs text-zinc-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white" />
+                        @error('net_quantity') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-zinc-700 dark:text-zinc-300">Unit *</label>
+                        <select wire:model="net_quantity_unit" required
+                                class="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-xs text-zinc-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white">
+                            @foreach (NetQuantityUnit::cases() as $unit)
+                                <option value="{{ $unit->value }}">{{ $unit->label() }}</option>
+                            @endforeach
+                        </select>
+                        @error('net_quantity_unit') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                    </div>
                 </div>
 
                 <!-- Existing Images -->

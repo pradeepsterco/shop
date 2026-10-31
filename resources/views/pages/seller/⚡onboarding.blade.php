@@ -38,6 +38,8 @@ new #[Layout('layouts.seller')] #[Title('Seller Onboarding')] class extends Comp
     public string $pickup_country = 'India';
 
     // Step 3: Tax & Bank
+    public string $legal_name = '';
+
     public string $pan = '';
     public string $gstin = '';
     public string $bank_account_holder = '';
@@ -213,7 +215,11 @@ new #[Layout('layouts.seller')] #[Title('Seller Onboarding')] class extends Comp
             $this->gstin = strtoupper(trim($this->gstin));
         }
 
+        $this->legal_name = trim($this->legal_name);
+
         $this->validate([
+            // Shown to customers on the seller details page, as the e-commerce rules require
+            'legal_name' => ['required', 'string', 'min:2', 'max:191'],
             'pan' => ['required', 'string', 'regex:/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/'],
             'gstin' => ['nullable', 'string', 'regex:/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/'],
             'bank_account_holder' => ['required', 'string', 'max:255'],
@@ -223,6 +229,7 @@ new #[Layout('layouts.seller')] #[Title('Seller Onboarding')] class extends Comp
 
         $profile = $this->getOrCreateProfile();
         $profile->fill([
+            'legal_name' => $this->legal_name,
             'pan' => $this->pan,
             'gstin' => $this->gstin ?: null,
             'bank_account_holder' => $this->bank_account_holder,
@@ -295,6 +302,8 @@ new #[Layout('layouts.seller')] #[Title('Seller Onboarding')] class extends Comp
         ]);
 
         $profile = $this->getOrCreateProfile();
+        // The checkbox is the seller's declaration that their details are true (Consumer Protection (E-Commerce) Rules, 2020)
+        $profile->forceFill(['declaration_accepted_at' => now()])->save();
         $profile->submit();
 
         $this->sellerProfile = $profile->fresh();
@@ -339,6 +348,7 @@ new #[Layout('layouts.seller')] #[Title('Seller Onboarding')] class extends Comp
 
         $this->store_name = $p->store_name;
         $this->store_slug = $p->store_slug;
+        $this->legal_name = $p->legal_name ?? '';
         $this->is_slug_customized = filled($p->store_slug) && filled($p->store_name) && $p->store_slug !== Str::slug($p->store_name);
         $this->business_type = $p->business_type;
         $this->description = $p->description ?? '';
@@ -625,6 +635,14 @@ new #[Layout('layouts.seller')] #[Title('Seller Onboarding')] class extends Comp
                 <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">All sensitive identifiers and account numbers are encrypted in storage.</p>
 
                 <form wire:submit="saveStep3" class="mt-6 space-y-5">
+                    <div>
+                        <label for="legal_name" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Registered Business Name *</label>
+                        <input wire:model="legal_name" type="text" id="legal_name" required maxlength="191" placeholder="As on your PAN or GST registration"
+                               class="mt-1 block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-zinc-500 focus:outline-hidden focus:ring-1 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white" />
+                        <p class="mt-1 text-xs text-zinc-400">Shown to customers on your seller details page, as Indian e-commerce rules require. Individuals enter their full legal name.</p>
+                        @error('legal_name') <p class="mt-1 text-xs text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
+                    </div>
+
                     <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
                         <div>
                             <label for="pan" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">PAN Card Number *</label>

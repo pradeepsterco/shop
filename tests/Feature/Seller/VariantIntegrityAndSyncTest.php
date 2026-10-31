@@ -58,6 +58,8 @@ test('tick -> untick -> retick -> save creates exactly one variant and listing',
         ->set('brand_id', $this->brand->id)
         ->set('title', 'Summer Graphic T-Shirt')
         ->set('description', 'Comfortable daily wear cotton t-shirt')
+        ->set('generic_name', 'T-shirt')
+        ->set('net_quantity', '1')
         ->call('saveStep3')
         ->assertSet('currentStep', 4);
 
@@ -104,6 +106,8 @@ test('half-filled variant row is rejected with per-row error and nothing is save
         ->set('brand_id', $this->brand->id)
         ->set('title', 'Summer Graphic T-Shirt')
         ->set('description', 'Comfortable daily wear cotton t-shirt')
+        ->set('generic_name', 'T-shirt')
+        ->set('net_quantity', '1')
         ->call('saveStep3')
         ->assertSet('currentStep', 4);
 
@@ -307,6 +311,8 @@ test('retired or hidden option cannot be added to a new variant', function () {
         ->set('brand_id', $this->brand->id)
         ->set('title', 'Testing Retired Option Block')
         ->set('description', 'Description for test')
+        ->set('generic_name', 'T-shirt')
+        ->set('net_quantity', '1')
         ->call('saveStep3')
         ->assertSet('currentStep', 4);
 
@@ -522,6 +528,8 @@ test('submit to QC is blocked while needs_update or invalid variants exist', fun
         ->set('brand_id', $this->brand->id)
         ->set('title', 'Blocked QC Product')
         ->set('description', 'Valid product description for testing purposes')
+        ->set('generic_name', 'T-shirt')
+        ->set('net_quantity', '1')
         ->call('saveStep3');
 
     $draftId = $component->get('draftProductId');
@@ -548,6 +556,8 @@ test('partial draft saves in early steps but cannot submit to QC without variant
         ->set('brand_id', $this->brand->id)
         ->set('title', 'Incomplete Product')
         ->set('description', 'Product with no variants')
+        ->set('generic_name', 'T-shirt')
+        ->set('net_quantity', '1')
         ->call('saveStep3')
         ->assertSet('currentStep', 4);
 

@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Enums\BrandStatus;
 use App\Enums\ListingStatus;
+use App\Enums\NetQuantityUnit;
 use App\Enums\ProductImageStatus;
 use App\Enums\ProductQcStatus;
 use App\Enums\SellerStatus;
@@ -680,6 +681,9 @@ class ProductSeeder extends Seeder
                     'description' => $data['description'],
                     'highlights' => $data['highlights'],
                     'specs' => $data['specs'],
+                    'generic_name' => $vertical->name,
+                    'net_quantity' => 1,
+                    'net_quantity_unit' => NetQuantityUnit::Count,
                     'created_by' => $primarySeller->id,
                     'qc_status' => ProductQcStatus::Approved,
                     'reviewed_at' => now(),

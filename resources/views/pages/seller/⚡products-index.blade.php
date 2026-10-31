@@ -517,6 +517,10 @@ new #[Layout('layouts.seller')] #[Title('My Products')] class extends Component 
                                     {{ $prod->qc_status === ProductQcStatus::Rejected ? 'Fix & Resubmit' : 'Manage' }}
                                 </a>
                             @elseif ($prod->qc_status === ProductQcStatus::Draft)
+                                <a href="{{ route('seller.products.create', ['draft' => $prod->id]) }}" wire:navigate data-test="continue-draft-{{ $prod->id }}"
+                                   class="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 transition shadow-2xs">
+                                    Continue
+                                </a>
                                 <button type="button" wire:click="deleteDraft({{ $prod->id }})" wire:confirm="Are you sure you want to discard this draft?"
                                         class="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 dark:border-red-900/50 dark:bg-red-950 dark:text-red-300 transition">
                                     Delete
@@ -676,6 +680,11 @@ new #[Layout('layouts.seller')] #[Title('My Products')] class extends Component 
                         <a href="{{ route('seller.products.edit', $prod) }}" wire:navigate
                            class="rounded-lg bg-zinc-900 px-4 py-2 text-xs font-semibold text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 transition">
                             {{ $prod->qc_status === ProductQcStatus::Rejected ? 'Fix & Resubmit Product' : 'Edit Product Details' }}
+                        </a>
+                    @elseif ($prod->qc_status === ProductQcStatus::Draft)
+                        <a href="{{ route('seller.products.create', ['draft' => $prod->id]) }}" wire:navigate
+                           class="rounded-lg bg-zinc-900 px-4 py-2 text-xs font-semibold text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 transition">
+                            Continue Draft
                         </a>
                     @endif
                 </div>

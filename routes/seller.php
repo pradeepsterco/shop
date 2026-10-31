@@ -22,6 +22,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('returns/requests/{request}/photos/{kind}/{index}', [ReturnPhotoController::class, 'seller'])->whereIn('kind', ['customer', 'seller'])->whereNumber('index')->name('returns.request-photo');
         Route::livewire('payments', 'pages::seller.payments-index')->name('payments.index');
         Route::livewire('payments/statement', 'pages::seller.payments-statement')->name('payments.statement');
+
+        // Support stays open to suspended sellers, who often need it most
+        Route::livewire('support', 'pages::seller.support-index')->name('support.index');
+        Route::livewire('support/new', 'pages::seller.support-create')->name('support.create');
+        Route::livewire('support/{ticket}', 'pages::seller.support-show')->name('support.show');
     });
 
     // Store operations requiring active approval (Overview, Products, Store Profile, Settings)

@@ -176,7 +176,7 @@ new #[Layout('layouts.app')] #[Title('Order Details')] class extends Component {
     #[Computed]
     public function order(): ?Order
     {
-        return Order::with(['sellerOrders.items.variant.product', 'sellerOrders.statusHistories'])
+        return Order::with(['sellerOrders.items.variant.product', 'sellerOrders.statusHistories', 'sellerOrders.sellerProfile:id,store_slug'])
             ->where('order_number', $this->orderNumber)
             ->first();
     }
@@ -276,7 +276,11 @@ new #[Layout('layouts.app')] #[Title('Order Details')] class extends Component {
                 Placed on @datetime($order->placed_at)
             </p>
         </div>
-        <div>
+        <div class="flex flex-wrap items-center gap-3">
+            <a href="{{ route('support.create', ['order' => $order->order_number]) }}" wire:navigate data-test="order-help-link"
+               class="text-xs font-bold uppercase tracking-wider text-amber-600 hover:text-amber-700 dark:text-amber-400">
+                Need help with this order?
+            </a>
             <span class="inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-bold uppercase {{ $order->status->value === 'cancelled' ? 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300' : ($order->status->value === 'completed' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' : 'bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-200') }}">
                 Status: {{ $order->status->label() }}
             </span>
@@ -326,7 +330,11 @@ new #[Layout('layouts.app')] #[Title('Order Details')] class extends Component {
                     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-zinc-100 pb-4 dark:border-zinc-800">
                         <div>
                             <span class="text-xs font-bold uppercase tracking-wider text-zinc-400">Package from</span>
-                            <span class="ml-1 text-sm font-bold text-zinc-900 dark:text-white">{{ $sellerOrder->seller_store_name }}</span>
+                            @if ($sellerOrder->sellerProfile?->store_slug)
+                                <a href="{{ route('sellers.show', ['slug' => $sellerOrder->sellerProfile->store_slug]) }}" class="ml-1 text-sm font-bold text-zinc-900 hover:underline dark:text-white">{{ $sellerOrder->seller_store_name }}</a>
+                            @else
+                                <span class="ml-1 text-sm font-bold text-zinc-900 dark:text-white">{{ $sellerOrder->seller_store_name }}</span>
+                            @endif
                             @if ($sellerOrder->seller_pickup_state)
                                 <span class="text-xs text-zinc-400">({{ $sellerOrder->seller_pickup_state }})</span>
                             @endif

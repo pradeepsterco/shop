@@ -153,11 +153,19 @@ new #[Layout('layouts.storefront')] class extends Component {
                     </div>
                 @endif
 
+                @php
+                    $sellerSlugs = \App\Models\SellerProfile::query()->whereIn('id', array_column($view['sellers'], 'seller_profile_id'))->pluck('store_slug', 'id');
+                @endphp
                 @foreach ($view['sellers'] as $seller)
                     <div class="rounded-2xl border border-zinc-200 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden">
                         <!-- Seller Header -->
                         <div class="border-b border-zinc-100 bg-zinc-50/50 px-6 py-3 text-xs font-medium text-zinc-600 dark:border-zinc-800 dark:bg-zinc-800/30 dark:text-zinc-400">
-                            Sold by <strong class="text-zinc-900 dark:text-white">{{ $seller['seller_name'] }}</strong>
+                            Sold by
+                            @if ($slug = $sellerSlugs[$seller['seller_profile_id']] ?? null)
+                                <a href="{{ route('sellers.show', ['slug' => $slug]) }}" class="font-bold text-zinc-900 hover:underline dark:text-white">{{ $seller['seller_name'] }}</a>
+                            @else
+                                <strong class="text-zinc-900 dark:text-white">{{ $seller['seller_name'] }}</strong>
+                            @endif
                         </div>
 
                         <!-- Seller Item Lines -->

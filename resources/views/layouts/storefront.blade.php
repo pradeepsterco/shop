@@ -92,6 +92,10 @@
                     <a href="{{ route('seller.apply') }}" class="hover:text-zinc-800 dark:hover:text-zinc-200 transition">Sell on {{ brand_name() }}</a>
                     <span>&middot;</span>
                     <a href="{{ route('products.index') }}" class="hover:text-zinc-800 dark:hover:text-zinc-200 transition" wire:navigate>All Categories</a>
+                    <span>&middot;</span>
+                    <a href="{{ route('support.index') }}" class="hover:text-zinc-800 dark:hover:text-zinc-200 transition" wire:navigate>Help &amp; Support</a>
+                    <span>&middot;</span>
+                    <a href="{{ route('grievance-officer') }}" class="hover:text-zinc-800 dark:hover:text-zinc-200 transition" wire:navigate>Grievance Officer</a>
                 </div>
             </div>
         </div>

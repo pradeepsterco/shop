@@ -70,6 +70,8 @@ test('creator editing live approved product content places updates in pending_ch
         ->set('title', 'Proposed New Title Awaiting Review')
         ->set('description', 'Updated new description with more features')
         ->set('specs', ['fabric' => 'organic-cotton'])
+        ->set('generic_name', 'T-shirt')
+        ->set('net_quantity', '1')
         ->call('saveCatalogContent')
         ->assertHasNoErrors();
 
@@ -79,10 +81,46 @@ test('creator editing live approved product content places updates in pending_ch
     expect($product->title)->toBe('Live Product Title')
         ->and($product->description)->toBe('Live description that customers currently see')
         ->and($product->specs)->toBe(['fabric' => 'cotton'])
+        ->and($product->generic_name)->toBeNull()
         // But pending_changes holds the new draft waiting in QC
         ->and($product->qc_status)->toBe(ProductQcStatus::QcPending)
         ->and($product->pending_changes['title'])->toBe('Proposed New Title Awaiting Review')
-        ->and($product->pending_changes['specs'])->toBe(['fabric' => 'organic-cotton']);
+        ->and($product->pending_changes['specs'])->toBe(['fabric' => 'organic-cotton'])
+        ->and($product->pending_changes['generic_name'])->toBe('T-shirt')
+        ->and($product->pending_changes['net_quantity_unit'])->toBe('count');
+});
+
+test('creator cannot save catalog content without generic name and net quantity', function () {
+    $user = User::factory()->create();
+    $seller = SellerProfile::factory()->create(['user_id' => $user->id, 'status' => SellerStatus::Approved]);
+    $product = Product::factory()->create(['created_by' => $seller->id, 'generic_name' => null, 'net_quantity' => null]);
+
+    Livewire::actingAs($user)
+        ->test('pages::seller.products-edit', ['product' => $product])
+        ->set('net_quantity', '0')
+        ->set('net_quantity_unit', 'bushel')
+        ->call('saveCatalogContent')
+        ->assertHasErrors(['generic_name' => 'required', 'net_quantity' => 'gt', 'net_quantity_unit']);
+
+    expect($product->fresh()->pending_changes)->toBeNull();
+});
+
+test('edit form shows declarations waiting in QC', function () {
+    $user = User::factory()->create();
+    $seller = SellerProfile::factory()->create(['user_id' => $user->id, 'status' => SellerStatus::Approved]);
+    $product = Product::factory()->qcPending()->create([
+        'created_by' => $seller->id,
+        'generic_name' => null,
+        'net_quantity' => null,
+        'net_quantity_unit' => null,
+        'pending_changes' => ['generic_name' => 'Board game', 'net_quantity' => '2', 'net_quantity_unit' => 'count'],
+    ]);
+
+    Livewire::actingAs($user)
+        ->test('pages::seller.products-edit', ['product' => $product])
+        ->assertSet('generic_name', 'Board game')
+        ->assertSet('net_quantity', '2')
+        ->assertSet('net_quantity_unit', 'count');
 });
 
 test('seller can update price and stock on existing listings with instant save', function () {

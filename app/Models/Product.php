@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\BrandStatus;
+use App\Enums\NetQuantityUnit;
 use App\Enums\ProductImageStatus;
 use App\Enums\ProductQcStatus;
 use App\Search\Contracts\SearchIndexerInterface;
@@ -28,6 +29,9 @@ use Illuminate\Support\Str;
  * @property string $description
  * @property array<int, string>|null $highlights
  * @property array<string, mixed>|null $specs
+ * @property string|null $generic_name
+ * @property string|null $net_quantity
+ * @property NetQuantityUnit|null $net_quantity_unit
  * @property int|null $created_by
  * @property ProductQcStatus $qc_status
  * @property string|null $qc_notes
@@ -52,6 +56,11 @@ class Product extends Model
     /** @use HasFactory<ProductFactory> */
     use HasFactory;
 
+    /**
+     * Catalog content that a creator's edit to an approved product parks in pending_changes until QC approves it.
+     */
+    public const PENDING_CHANGE_FIELDS = ['title', 'description', 'highlights', 'specs', 'brand_id', 'generic_name', 'net_quantity', 'net_quantity_unit'];
+
     protected $fillable = [
         'vertical_id',
         'brand_id',
@@ -60,6 +69,9 @@ class Product extends Model
         'description',
         'highlights',
         'specs',
+        'generic_name',
+        'net_quantity',
+        'net_quantity_unit',
         'created_by',
         'qc_status',
         'qc_notes',
@@ -80,6 +92,8 @@ class Product extends Model
         return [
             'highlights' => 'array',
             'specs' => 'array',
+            'net_quantity' => 'decimal:3',
+            'net_quantity_unit' => NetQuantityUnit::class,
             'pending_changes' => 'array',
             'qc_status' => ProductQcStatus::class,
             'reviewed_at' => 'datetime',
@@ -410,6 +424,37 @@ class Product extends Model
         return Str::slug("{$brandName} {$this->title}");
     }
 
+    /**
+     * Package declarations still missing, counting pending changes (labels for messages).
+     *
+     * @return array<int, string>
+     */
+    public function missingDeclarations(): array
+    {
+        $pending = (array) $this->pending_changes;
+        $genericName = array_key_exists('generic_name', $pending) ? $pending['generic_name'] : $this->generic_name;
+        $quantity = array_key_exists('net_quantity', $pending) ? $pending['net_quantity'] : $this->net_quantity;
+        $unit = array_key_exists('net_quantity_unit', $pending) ? $pending['net_quantity_unit'] : $this->net_quantity_unit?->value;
+
+        $missing = [];
+        if (blank($genericName)) {
+            $missing[] = 'generic name';
+        }
+        if (! is_numeric($quantity) || (float) $quantity <= 0 || NetQuantityUnit::tryFrom((string) $unit) === null) {
+            $missing[] = 'net quantity';
+        }
+
+        return $missing;
+    }
+
+    /**
+     * e.g. "1 N", "500 g".
+     */
+    public function netQuantityLabel(): ?string
+    {
+        return NetQuantityUnit::format($this->net_quantity, $this->net_quantity_unit);
+    }
+
     public function submitForQc(): void
     {
         $this->update([
@@ -433,7 +478,7 @@ class Product extends Model
         // Apply pending changes if present
         if (! empty($this->pending_changes)) {
             foreach ($this->pending_changes as $key => $val) {
-                if (in_array($key, ['title', 'description', 'highlights', 'specs', 'brand_id'], true)) {
+                if (in_array($key, self::PENDING_CHANGE_FIELDS, true)) {
                     $dataToUpdate[$key] = $val;
                 }
             }

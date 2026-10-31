@@ -265,6 +265,25 @@
                     </a>
                     @endcan
 
+                    @can('support.view')
+                    <a href="{{ route('admin.support.index') }}"
+                       wire:navigate
+                       class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition {{ request()->routeIs('admin.support.*') ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white font-semibold' : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-white' }}">
+                        <svg class="size-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z"/>
+                        </svg>
+                        <span class="flex-1">Support</span>
+                        @php
+                            $supportUnread = app(\App\Helpdesk\Services\HelpdeskService::class)->unreadCountForStaff((int) auth('admin')->id());
+                        @endphp
+                        @if ($supportUnread > 0)
+                            <span class="inline-flex min-w-5 h-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
+                                {{ $supportUnread > 99 ? '99+' : $supportUnread }}
+                            </span>
+                        @endif
+                    </a>
+                    @endcan
+
                     @can('branding.view')
                     <a href="{{ route('admin.settings.branding') }}"
                        wire:navigate
@@ -605,6 +624,26 @@
                             <path stroke-linecap="round" stroke-linejoin="round" d="M9 14l-4-4 4-4m-4 4h11a4 4 0 010 8h-1"/>
                         </svg>
                         <span>Refunds</span>
+                    </a>
+                    @endcan
+
+                    @can('support.view')
+                    <a href="{{ route('admin.support.index') }}"
+                       @click="mobileMenuOpen = false"
+                       wire:navigate
+                       class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition {{ request()->routeIs('admin.support.*') ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white font-semibold' : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-white' }}">
+                        <svg class="size-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z"/>
+                        </svg>
+                        <span class="flex-1">Support</span>
+                        @php
+                            $supportUnread = app(\App\Helpdesk\Services\HelpdeskService::class)->unreadCountForStaff((int) auth('admin')->id());
+                        @endphp
+                        @if ($supportUnread > 0)
+                            <span class="inline-flex min-w-5 h-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
+                                {{ $supportUnread > 99 ? '99+' : $supportUnread }}
+                            </span>
+                        @endif
                     </a>
                     @endcan
 

@@ -84,6 +84,14 @@ class AdminPermissions
 
     public const REVIEWS_MANAGE = 'reviews.manage';
 
+    public const SUPPORT_VIEW = 'support.view';
+
+    public const SUPPORT_REPLY = 'support.reply';
+
+    public const SUPPORT_ASSIGN = 'support.assign';
+
+    public const SUPPORT_SETTINGS = 'support.settings';
+
     /**
      * Get all registered permissions grouped by module.
      *
@@ -285,6 +293,24 @@ class AdminPermissions
                 self::REVIEWS_MANAGE => [
                     'label' => 'Moderate Reviews',
                     'description' => 'Hide, reject, restore, or delete product reviews and recalculate ratings.',
+                ],
+            ],
+            'Customer Support' => [
+                self::SUPPORT_VIEW => [
+                    'label' => 'View Support Tickets',
+                    'description' => 'View the support inbox, ticket threads, internal notes, and attachments.',
+                ],
+                self::SUPPORT_REPLY => [
+                    'label' => 'Work Support Tickets',
+                    'description' => 'Reply to requesters, add internal notes, change status and priority, and take unassigned tickets.',
+                ],
+                self::SUPPORT_ASSIGN => [
+                    'label' => 'Assign Support Tickets',
+                    'description' => 'Assign or reassign any ticket to any active staff member.',
+                ],
+                self::SUPPORT_SETTINGS => [
+                    'label' => 'Manage Grievance Officer',
+                    'description' => 'Edit the grievance officer details shown on the public grievance page.',
                 ],
             ],
         ];

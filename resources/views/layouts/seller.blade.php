@@ -19,6 +19,10 @@
         $sellerStatus = $sellerProfile?->status;
         $isApproved = $sellerStatus === \App\Enums\SellerStatus::Approved;
         $isSuspended = $sellerStatus === \App\Enums\SellerStatus::Suspended;
+        // Store support requests with replies the seller has not opened
+        $supportUnread = $sellerUser && ($isApproved || $isSuspended)
+            ? app(\App\Helpdesk\Services\HelpdeskService::class)->unreadCountForRequester((int) $sellerUser->id, \App\Helpdesk\Enums\RequesterType::Seller)
+            : 0;
     @endphp
 
     <div x-data="{ mobileMenuOpen: false }" class="flex min-h-screen">
@@ -115,6 +119,20 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>
                                 </svg>
                             </x-slot:icon>
+                        </x-seller-sidebar-nav-item>
+
+                        {{-- Support --}}
+                        <x-seller-sidebar-nav-item
+                            :route="route('seller.support.index')"
+                            label="Support"
+                            :active="request()->routeIs('seller.support.*')"
+                            :locked="! $isApproved && ! $isSuspended">
+                            <x-slot:icon>
+                                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z"/>
+                                </svg>
+                            </x-slot:icon>
+                            <x-support.unread-badge :count="$supportUnread" />
                         </x-seller-sidebar-nav-item>
 
                         {{-- Store Profile --}}
@@ -287,6 +305,21 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>
                                 </svg>
                             </x-slot:icon>
+                        </x-seller-sidebar-nav-item>
+
+                        {{-- Support --}}
+                        <x-seller-sidebar-nav-item
+                            :route="route('seller.support.index')"
+                            label="Support"
+                            :active="request()->routeIs('seller.support.*')"
+                            :locked="! $isApproved && ! $isSuspended"
+                            @click="mobileMenuOpen = false">
+                            <x-slot:icon>
+                                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z"/>
+                                </svg>
+                            </x-slot:icon>
+                            <x-support.unread-badge :count="$supportUnread" />
                         </x-seller-sidebar-nav-item>
 
                         {{-- Store Profile --}}
